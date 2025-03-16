@@ -16,9 +16,20 @@ class CameraControl:
     Handles video streaming and camera positioning.
     """
     
-    def __init__(self):
-        """Initialize the camera control module."""
-        self.robot = LOBOROBOT()
+    def __init__(self, robot=None):
+        """
+        Initialize the camera control module.
+        
+        Args:
+            robot (LOBOROBOT, optional): An instance of LOBOROBOT. If None, a new instance will be created.
+        """
+        if robot is None:
+            self.robot = LOBOROBOT()
+            logger.info("Created new LOBOROBOT instance in CameraControl")
+        else:
+            self.robot = robot
+            logger.info("Using shared LOBOROBOT instance in CameraControl")
+            
         self.camera = None
         self.is_running = True
         self.frame_buffer = []
@@ -52,45 +63,44 @@ class CameraControl:
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self.camera.set(cv2.CAP_PROP_FPS, self.fps)
             
-            if not self.camera.isOpened():
-                logger.error("Failed to open camera")
-                return False
+            # Set initial gimbal position
+            self.set_gimbal_position(self.pan, self.tilt)
             
             logger.info(f"Camera initialized: {self.width}x{self.height} @ {self.fps}fps")
-            return True
         except Exception as e:
             logger.error(f"Error initializing camera: {e}")
-            return False
+            self.camera = None
     
     def start(self):
         """Start the camera control thread."""
-        self.is_running = True
-        self.camera_thread = threading.Thread(target=self._camera_loop)
-        self.camera_thread.daemon = True
-        self.camera_thread.start()
-        logger.info("Camera thread started")
+        if self.camera_thread is None:
+            self.is_running = True
+            self.camera_thread = threading.Thread(target=self._camera_loop)
+            self.camera_thread.daemon = True
+            self.camera_thread.start()
+            logger.info("Camera thread started")
     
     def stop(self):
         """Stop the camera control thread and release resources."""
         self.is_running = False
         if self.camera_thread:
             self.camera_thread.join(timeout=1.0)
+            self.camera_thread = None
         
+        # Release camera
         if self.camera:
             self.camera.release()
-        
-        # Reset gimbal to default position
-        self.set_gimbal_position(80, 40)
+            self.camera = None
         
         logger.info("Camera control stopped")
     
     def set_gimbal_position(self, pan, tilt):
         """
-        Set the gimbal position.
+        Set the gimbal position for the camera.
         
         Args:
-            pan (int): Pan angle (35°-125°)
-            tilt (int): Tilt angle (0°-85°)
+            pan (int): Pan angle in degrees (35-125)
+            tilt (int): Tilt angle in degrees (0-85)
         """
         # Ensure values are within range
         pan = max(35, min(125, pan))
@@ -100,25 +110,26 @@ class CameraControl:
         self.pan = pan
         self.tilt = tilt
         
-        # Set servo angles
         try:
-            # Assuming channel 0 is pan and channel 1 is tilt
-            self.robot.set_servo_angle(0, pan)
-            self.robot.set_servo_angle(1, tilt)
-            logger.debug(f"Gimbal position set to pan={pan}°, tilt={tilt}°")
+            # Set servo positions
+            self.robot.Servo(1, pan)  # Pan servo
+            self.robot.Servo(0, tilt)  # Tilt servo
+            logger.info(f"Gimbal position set to pan={pan}, tilt={tilt}")
         except Exception as e:
             logger.error(f"Error setting gimbal position: {e}")
     
     def get_latest_frame(self):
         """
-        Get the latest frame from the buffer.
+        Get the latest frame from the camera.
         
         Returns:
-            str: Base64 encoded JPEG image
+            str: Base64 encoded JPEG image or None if no frame is available
         """
         with self.lock:
             if not self.frame_buffer:
                 return None
+            
+            # Return the latest frame
             return self.frame_buffer[-1]
     
     def get_frame_buffer(self):
@@ -132,39 +143,54 @@ class CameraControl:
             return self.frame_buffer.copy()
     
     def _camera_loop(self):
-        """Camera loop that captures frames at the specified FPS."""
-        frame_interval = 1.0 / self.fps
+        """Main camera loop that captures frames and updates the buffer."""
         last_frame_time = time.time()
+        actual_fps = 0
         
         while self.is_running:
             try:
-                current_time = time.time()
-                elapsed = current_time - last_frame_time
-                
-                # Maintain frame rate
-                if elapsed < frame_interval:
-                    time.sleep(frame_interval - elapsed)
+                if self.camera is None or not self.camera.isOpened():
+                    logger.warning("Camera not available, attempting to reinitialize...")
+                    self._init_camera()
+                    time.sleep(1)
                     continue
-                
-                last_frame_time = current_time
                 
                 # Capture frame
                 ret, frame = self.camera.read()
+                
                 if not ret:
                     logger.warning("Failed to capture frame")
                     time.sleep(0.1)
                     continue
                 
-                # Encode frame to JPEG
-                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
-                _, buffer = cv2.imencode('.jpg', frame, encode_param)
+                # Calculate actual FPS
+                current_time = time.time()
+                dt = current_time - last_frame_time
+                if dt > 0:
+                    actual_fps = 1.0 / dt
+                last_frame_time = current_time
                 
-                # Convert to base64 for transmission
+                # Add timestamp and FPS to frame
+                cv2.putText(
+                    frame,
+                    f"{time.strftime('%Y-%m-%d %H:%M:%S')} | FPS: {actual_fps:.1f}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2
+                )
+                
+                # Encode frame to JPEG
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                
+                # Convert to base64 for web streaming
                 jpg_as_text = base64.b64encode(buffer).decode('utf-8')
                 
                 # Update frame buffer
                 with self.lock:
                     self.frame_buffer.append(jpg_as_text)
+                    
                     # Keep buffer size limited
                     while len(self.frame_buffer) > self.max_buffer_size:
                         self.frame_buffer.pop(0)

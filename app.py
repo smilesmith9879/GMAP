@@ -3,6 +3,7 @@ from flask_socketio import SocketIO, emit
 import time
 import threading
 import logging
+from LOBOROBOT import LOBOROBOT
 
 # Import backend modules
 from backend.motor_control import MotorControl
@@ -21,9 +22,13 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'ai-smart-four-wheel-drive-car'
 socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
 
-# Initialize backend modules
-motor_control = MotorControl()
-camera_control = CameraControl()
+# Initialize LOBOROBOT once
+robot = LOBOROBOT()
+logger.info("LOBOROBOT initialized once for all modules")
+
+# Initialize backend modules with shared robot instance
+motor_control = MotorControl(robot=robot)
+camera_control = CameraControl(robot=robot)
 slam_processor = SLAMProcessor()
 sensor_fusion = SensorFusion()
 websocket_manager = WebSocketManager(socketio)
@@ -129,4 +134,5 @@ if __name__ == '__main__':
         motor_control.stop()
         camera_control.stop()
         slam_processor.stop()
-        sensor_fusion.stop() 
+        sensor_fusion.stop()
+        # No need to explicitly stop the robot as it's handled by the modules 
