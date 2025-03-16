@@ -125,11 +125,13 @@ class CameraControl:
         
         # Set servo angles
         try:
-            logger.debug(f"Calling set_servo_angle(0, {pan}) for pan")
-            self.robot.set_servo_angle(0, pan)
+            logger.info(f"About to call set_servo_angle with channel=0, pan={pan}")
+            self.robot.set_servo_angle(9, pan)
+            logger.info(f"set_servo_angle for pan completed")
             
-            logger.debug(f"Calling set_servo_angle(1, {tilt}) for tilt")
-            self.robot.set_servo_angle(1, tilt)
+            logger.info(f"About to call set_servo_angle with channel=1, tilt={tilt}")
+            self.robot.set_servo_angle(10, tilt)
+            logger.info(f"set_servo_angle for tilt completed")
             
             logger.info(f"Gimbal position successfully set to pan={pan}°, tilt={tilt}°")
         except Exception as e:

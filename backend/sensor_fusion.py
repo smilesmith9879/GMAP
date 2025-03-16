@@ -51,7 +51,20 @@ class SensorFusion:
         self.gyro_bias = {'x': 0, 'y': 0, 'z': 0}
         
         # Initialize the IMU
-        self._init_imu()
+        try:
+            logger.info("Initializing I2C bus...")
+            self.bus = smbus.SMBus(1)
+            logger.info(f"I2C bus initialized. Attempting to connect to MPU6050 at address 0x{MPU6050_ADDR:x}")
+            
+            # 检查是否可以与MPU6050通信
+            try:
+                # 读取WHO_AM_I寄存器(如果有)或任何其他寄存器
+                device_id = self.bus.read_byte_data(MPU6050_ADDR, 0x75)  # WHO_AM_I寄存器
+                logger.info(f"MPU6050 device ID: 0x{device_id:x}")
+            except Exception as e:
+                logger.error(f"Failed to communicate with MPU6050: {e}")
+        except Exception as e:
+            logger.error(f"Failed to initialize I2C: {e}")
         
         # Start sensor thread
         self.start()
@@ -97,6 +110,14 @@ class SensorFusion:
         Calibrate the IMU by collecting samples and calculating bias.
         Takes 5 seconds (50 samples at 10Hz) as per project requirements.
         """
+        logger.info("Calibrate IMU called, current status:")
+        logger.info(f"is_imu_available: {self.is_imu_available}")
+        logger.info(f"is_imu_calibrated: {self.is_imu_calibrated}")
+        
+        if not self.is_imu_calibrated:  # 或 if not self.is_imu_available:
+            logger.warning("Cannot calibrate IMU due to condition check failure")
+            return False
+        
         logger.info("Starting IMU calibration...")
         
         # Reset calibration values

@@ -17,8 +17,8 @@ Modules: MotorControl, CameraControl, SLAMProcessor, SensorFusion, WebSocketMana
 	Auto-center: (stop)
 
 （2）Gimbal (via LOBOROBOT.py):
-	Pan: 35°-125°, default 80°
-	Tilt: 0°-85°, default 40°
+	Pan: 35°-125°, default 80°，pwm9
+	Tilt: 0°-85°, default 40°,pwm10
 	Auto-center: (80°, 40°)
 
  (3)IMU: 10Hz, 50-sample calibration (5s), bias removal, “Calibration Complete” prompt

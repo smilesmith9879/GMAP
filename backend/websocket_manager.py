@@ -155,4 +155,10 @@ class WebSocketManager:
                 
             except Exception as e:
                 logger.error(f"Error in WebSocket manager loop: {e}")
-                time.sleep(check_interval) 
+                time.sleep(check_interval)
+
+    def send_video_frame(self, frame_data):
+        """Send a video frame to all connected clients."""
+        logger.info(f"Sending video frame: size={len(frame_data)} bytes")
+        self.socketio.emit('video_frame', {'data': frame_data})
+        logger.info("Video frame sent to clients") 
