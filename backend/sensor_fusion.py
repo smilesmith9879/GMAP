@@ -3,6 +3,7 @@ import threading
 import logging
 import numpy as np
 import math
+import random
 try:
     import smbus2 as smbus
 except ImportError:
@@ -109,54 +110,6 @@ class SensorFusion:
             self.sensor_thread.join(timeout=1.0)
         logger.info("Sensor fusion stopped")
     
-    def calibrate_imu(self):
-        """
-        Calibrate the IMU by collecting samples and calculating bias.
-        Takes 5 seconds (50 samples at 10Hz) as per project requirements.
-        """
-        logger.info("Starting IMU calibration")
-        
-        # 检查IMU是否可用，而不是检查它是否已校准
-        if not self.is_imu_available:
-            logger.warning("IMU not available, cannot calibrate")
-            return False
-        
-        logger.info("Starting IMU calibration process...")
-        
-        # Reset calibration values
-        accel_samples = {'x': [], 'y': [], 'z': []}
-        gyro_samples = {'x': [], 'y': [], 'z': []}
-        
-        # Collect 50 samples (5 seconds at 10Hz)
-        for _ in range(50):
-            # Read raw sensor data
-            accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z = self._read_raw_data()
-            
-            # Store samples
-            accel_samples['x'].append(accel_x)
-            accel_samples['y'].append(accel_y)
-            accel_samples['z'].append(accel_z)
-            gyro_samples['x'].append(gyro_x)
-            gyro_samples['y'].append(gyro_y)
-            gyro_samples['z'].append(gyro_z)
-            
-            time.sleep(0.1)  # 10Hz
-        
-        # Calculate average bias
-        with self.lock:
-            self.accel_bias['x'] = sum(accel_samples['x']) / len(accel_samples['x'])
-            self.accel_bias['y'] = sum(accel_samples['y']) / len(accel_samples['y'])
-            self.accel_bias['z'] = sum(accel_samples['z']) / len(accel_samples['z']) - 16384  # Remove gravity (1g)
-            
-            self.gyro_bias['x'] = sum(gyro_samples['x']) / len(gyro_samples['x'])
-            self.gyro_bias['y'] = sum(gyro_samples['y']) / len(gyro_samples['y'])
-            self.gyro_bias['z'] = sum(gyro_samples['z']) / len(gyro_samples['z'])
-            
-            self.is_calibrated = True
-            
-            logger.info(f"IMU calibration complete. Biases: accel=({self.accel_bias['x']:.1f}, {self.accel_bias['y']:.1f}, {self.accel_bias['z']:.1f}), gyro=({self.gyro_bias['x']:.1f}, {self.gyro_bias['y']:.1f}, {self.gyro_bias['z']:.1f})")
-        
-        return True
     
     def get_sensor_data(self):
         """
@@ -340,8 +293,9 @@ class SensorFusion:
         """Calibrate the IMU by calculating offsets."""
         logger.info("Starting IMU calibration")
         
-        if not self.is_calibrated:
-            logger.warning("IMU not calibrated, cannot calibrate")
+        # Check if IMU is available (not if it's already calibrated)
+        if not self.is_imu_available:
+            logger.warning("IMU not available, cannot calibrate")
             return False
         
         try:
@@ -349,36 +303,43 @@ class SensorFusion:
             samples = 100
             logger.info(f"Collecting {samples} samples for calibration")
             
-            gyro_x_sum = 0
-            gyro_y_sum = 0
-            gyro_z_sum = 0
+            # Reset calibration values
+            accel_samples = {'x': [], 'y': [], 'z': []}
+            gyro_samples = {'x': [], 'y': [], 'z': []}
             
+            # Collect samples
             for i in range(samples):
-                data = self._read_imu_data()
-                if data:
-                    gyro_x_sum += data['gyro'][0]
-                    gyro_y_sum += data['gyro'][1]
-                    gyro_z_sum += data['gyro'][2]
-                    
-                    if i % 10 == 0:
-                        logger.debug(f"Calibration progress: {i}/{samples}")
-                else:
-                    logger.warning("Failed to read IMU data during calibration")
-                    return False
+                # Read raw sensor data
+                accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z = self._read_raw_data()
+                
+                # Store samples
+                accel_samples['x'].append(accel_x)
+                accel_samples['y'].append(accel_y)
+                accel_samples['z'].append(accel_z)
+                gyro_samples['x'].append(gyro_x)
+                gyro_samples['y'].append(gyro_y)
+                gyro_samples['z'].append(gyro_z)
+                
+                if i % 10 == 0:
+                    logger.info(f"Calibration progress: {i}/{samples} samples collected")
                 
                 time.sleep(0.01)
             
-            # Calculate average offsets
-            self.gyro_offsets = (
-                gyro_x_sum / samples,
-                gyro_y_sum / samples,
-                gyro_z_sum / samples
-            )
-            
-            logger.info(f"IMU calibration complete. Gyro offsets: x={self.gyro_offsets[0]:.4f}, y={self.gyro_offsets[1]:.4f}, z={self.gyro_offsets[2]:.4f}")
+            # Calculate average bias
+            with self.lock:
+                self.accel_bias['x'] = sum(accel_samples['x']) / len(accel_samples['x'])
+                self.accel_bias['y'] = sum(accel_samples['y']) / len(accel_samples['y'])
+                self.accel_bias['z'] = sum(accel_samples['z']) / len(accel_samples['z']) - 16384  # Remove gravity (1g)
+                
+                self.gyro_bias['x'] = sum(gyro_samples['x']) / len(gyro_samples['x'])
+                self.gyro_bias['y'] = sum(gyro_samples['y']) / len(gyro_samples['y'])
+                self.gyro_bias['z'] = sum(gyro_samples['z']) / len(gyro_samples['z'])
             
             # Set IMU as calibrated
             self.is_calibrated = True
+            
+            logger.info(f"IMU calibration complete. Biases: accel=({self.accel_bias['x']:.1f}, {self.accel_bias['y']:.1f}, {self.accel_bias['z']:.1f}), gyro=({self.gyro_bias['x']:.1f}, {self.gyro_bias['y']:.1f}, {self.gyro_bias['z']:.1f})")
+            
             return True
             
         except Exception as e:
