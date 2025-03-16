@@ -32,24 +32,33 @@ function initVideoStream() {
     if (socket) {
         socket.on('video_frame', (data) => {
             console.log('Received video frame, type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data.data ? data.data.length : 'N/A'));
-            if (!isStreaming) {
-                isStreaming = true;
-                console.log('Video streaming started');
-                showNotification('Video streaming started', 'success');
-            }
             
-            // Update video feed - 处理两种可能的数据格式
-            if (typeof data === 'string') {
-                videoFeed.src = `data:image/jpeg;base64,${data}`;
-            } else if (data && data.data) {
-                videoFeed.src = `data:image/jpeg;base64,${data.data}`;
-            } else {
-                console.error('Unrecognized video frame format:', data);
-                return;
-            }
+            // 始终设置isStreaming为true并更新视频
+            isStreaming = true;
             
-            // Update FPS counter
-            updateFps();
+            // 添加时间戳防止浏览器缓存
+            try {
+                // 处理两种可能的数据格式
+                if (typeof data === 'string') {
+                    videoFeed.src = `data:image/jpeg;base64,${data}?t=${new Date().getTime()}`;
+                    console.log('Updated video with string data');
+                } else if (data && data.data) {
+                    videoFeed.src = `data:image/jpeg;base64,${data.data}?t=${new Date().getTime()}`;
+                    console.log('Updated video with object data');
+                } else {
+                    console.error('Invalid video data format:', data);
+                }
+                
+                // 强制重绘视频元素
+                videoFeed.style.display = 'none';
+                videoFeed.offsetHeight; // 触发重排
+                videoFeed.style.display = 'block';
+                
+                updateFps();
+            } catch (e) {
+                console.error('Error updating video feed:', e);
+                videoFeed.src = '/static/img/no-signal.png';
+            }
         });
         
         socket.on('video_error', (data) => {
@@ -59,6 +68,24 @@ function initVideoStream() {
             
             // Show no-signal image
             videoFeed.src = '/static/img/no-signal.png';
+        });
+
+        // 添加断开连接处理
+        socket.on('disconnect', () => {
+            console.error('WebSocket disconnected!');
+            isStreaming = false;
+            videoFeed.src = '/static/img/no-signal.png';
+            
+            // 尝试重新连接
+            setTimeout(() => {
+                console.log('Attempting to reconnect...');
+                socket.connect();
+            }, 1000);
+        });
+
+        // 添加重连处理
+        socket.on('reconnect', () => {
+            console.log('WebSocket reconnected!');
         });
     } else {
         console.error('Socket.IO not initialized');

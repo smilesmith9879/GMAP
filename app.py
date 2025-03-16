@@ -73,6 +73,12 @@ def handle_connect():
     connected_clients += 1
     logger.info(f"Client connected. Total clients: {connected_clients}")
     emit('status', {'message': 'Connected to server', 'clients': connected_clients})
+    
+    # 发送一个测试帧
+    latest_frame = camera_control.get_latest_frame()
+    if latest_frame:
+        logger.info("Sending initial test frame on connection")
+        emit('video_frame', latest_frame)  # 或 {'data': latest_frame} 取决于前端期望
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -113,6 +119,11 @@ def handle_calibrate_imu():
     sensor_fusion.calibrate_imu()
     emit('notification', {'message': 'IMU Calibration Complete'})
 
+@socketio.on('error')
+def handle_error(error):
+    """Handle WebSocket errors."""
+    logger.error(f"WebSocket error: {error}")
+
 def background_tasks():
     """Run background tasks for continuous updates."""
     global is_running
@@ -134,7 +145,7 @@ def background_tasks():
             # 每20帧记录一次日志，避免日志过多
             if frame_counter % 20 == 0:
                 logger.info(f"Sending video frame #{frame_counter} to clients")
-            socketio.emit('video_frame', latest_frame)  # 直接发送字符串而不是对象
+            socketio.emit('video_frame', {'data': latest_frame})  # 使用对象格式包装数据
         
         # Sleep to maintain update rate
         time.sleep(0.1)  # 10Hz
