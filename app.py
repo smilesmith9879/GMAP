@@ -157,13 +157,16 @@ def background_tasks():
     
     def status_monitor_task():
         """系统状态监控任务 - 在单独线程中运行"""
+        logger.info("状态监控线程启动")
+        count = 0
         while is_running:
             try:
-                # 获取系统状态
+                count += 1
+                logger.info(f"尝试获取系统状态 #{count}")
                 status = status_monitor.get_status()
+                logger.info(f"获取到状态: CPU={status.get('cpu')}%, 内存={status.get('memory')}%")
                 socketio.emit('status_update', status)
-                
-                # 1秒更新一次系统状态
+                logger.info("状态数据已发送")
                 time.sleep(1.0)
             except Exception as e:
                 logger.error(f"状态监控任务错误: {e}", exc_info=True)
@@ -261,6 +264,10 @@ def background_tasks():
                 time.sleep(sleep_time)
             elif cycle_time > 0.1:  # 如果循环耗时超过100ms，记录警告
                 logger.warning(f"主循环耗时过长: {cycle_time:.3f}s, 目标: 0.02s")
+            
+            # 在主循环中获取并发送状态
+            status = status_monitor.get_status()
+            socketio.emit('status_update', status)
             
         except Exception as e:
             logger.error(f"主循环错误: {e}", exc_info=True)
