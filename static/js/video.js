@@ -27,13 +27,9 @@ function initVideoStream() {
         return;
     }
     
-    console.log('Setting up video stream with Socket.IO');
     // Set up Socket.IO event for video frames
     if (socket) {
         socket.on('video_frame', (data) => {
-            console.log('Received video frame, type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data.data ? data.data.length : 'N/A'));
-            
-            // 始终设置isStreaming为true并更新视频
             isStreaming = true;
             
             try {

@@ -49,7 +49,7 @@ logger.info("LOBOROBOT initialized once")
 # Initialize backend modules
 motor_control = MotorControl(robot=robot)
 camera_control = CameraControl(robot=robot)
-slam_processor = SLAMProcessor()
+slam_processor = SLAMProcessor(socketio)
 sensor_fusion = SensorFusion()
 websocket_manager = WebSocketManager(socketio)
 status_monitor = StatusMonitor()
@@ -158,10 +158,10 @@ def background_tasks():
             if latest_frame:
                 frame_counter += 1
                 # 每20帧记录一次日志，避免日志过多
-                if frame_counter % 20 == 0:
+                if frame_counter % 200 == 0:
                     current_time = time.time()
                     elapsed = current_time - last_log_time
-                    fps = 20 / elapsed if elapsed > 0 else 0
+                    fps = 200 / elapsed if elapsed > 0 else 0
                     logger.info(f"Sending video frame #{frame_counter} to clients, size: {len(latest_frame)} bytes, avg FPS: {fps:.2f}")
                     last_log_time = current_time
                 

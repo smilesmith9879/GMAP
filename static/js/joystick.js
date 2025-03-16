@@ -13,6 +13,14 @@ let movementY = 0;
 let cameraX = 0;
 let cameraY = 0;
 
+// 摄像头云台默认位置
+const DEFAULT_PAN = 80;
+const DEFAULT_TILT = 40;
+
+// 云台自动回中的延时器
+let gimbalResetTimer = null;
+const GIMBAL_RESET_DELAY = 5000; // 5秒后自动回中
+
 // Throttle values
 const movementThrottleInterval = 50; // 20Hz as per project requirements
 const cameraThrottleInterval = 100; // 10Hz
@@ -57,9 +65,6 @@ function initJoysticks() {
             if (socket && isConnected) {
                 socket.emit('joystick_movement', { x: movementX, y: movementY });
             }
-            
-            // Debug
-            console.log('Movement:', { x: movementX.toFixed(2), y: movementY.toFixed(2) });
         }, movementThrottleInterval));
 
         movementJoystick.on('end', () => {
@@ -91,6 +96,12 @@ function initJoysticks() {
 
         // Camera joystick events
         cameraJoystick.on('move', throttle((evt, data) => {
+            // 清除回中定时器
+            if (gimbalResetTimer) {
+                clearTimeout(gimbalResetTimer);
+                gimbalResetTimer = null;
+            }
+            
             // Calculate normalized values (-1 to 1)
             const distance = Math.min(data.distance, 50) / 50; // Normalize to 0-1
             const angle = data.angle.radian;
@@ -102,8 +113,8 @@ function initJoysticks() {
             // Convert to pan/tilt angles
             // Pan: 35°-125°, default 80°
             // Tilt: 0°-85°, default 40°
-            const pan = 80 + (cameraX * 45); // 80° ± 45°
-            const tilt = 40 - (cameraY * 40); // 40° ± 40°
+            const pan = DEFAULT_PAN + (cameraX * 45); // 80° ± 45°
+            const tilt = DEFAULT_TILT - (cameraY * 40); // 40° ± 40°
             
             // Send to server
             if (socket && isConnected) {
@@ -118,8 +129,19 @@ function initJoysticks() {
         }, cameraThrottleInterval));
 
         cameraJoystick.on('end', () => {
-            // Keep last position, don't reset
-            console.log('Camera joystick released');
+            // 设置回中定时器
+            gimbalResetTimer = setTimeout(() => {
+                // 发送回中命令
+                if (socket && isConnected) {
+                    socket.emit('gimbal_control', { 
+                        pan: DEFAULT_PAN, 
+                        tilt: DEFAULT_TILT 
+                    });
+                }
+                // 重置变量
+                cameraX = 0;
+                cameraY = 0;
+            }, GIMBAL_RESET_DELAY);
         });
     }
 }

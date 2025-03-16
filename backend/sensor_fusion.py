@@ -114,15 +114,14 @@ class SensorFusion:
         Calibrate the IMU by collecting samples and calculating bias.
         Takes 5 seconds (50 samples at 10Hz) as per project requirements.
         """
-        logger.info("Calibrate IMU called, current status:")
-        logger.info(f"is_imu_available: {self.is_imu_available}")
-        logger.info(f"is_calibrated: {self.is_calibrated}")
+        logger.info("Starting IMU calibration")
         
-        if not self.is_imu_available:  # 修改条件：IMU不可用时无法校准
-            logger.warning("Cannot calibrate IMU: IMU not available")
+        # 检查IMU是否可用，而不是检查它是否已校准
+        if not self.is_imu_available:
+            logger.warning("IMU not available, cannot calibrate")
             return False
         
-        logger.info("Starting IMU calibration...")
+        logger.info("Starting IMU calibration process...")
         
         # Reset calibration values
         accel_samples = {'x': [], 'y': [], 'z': []}
@@ -154,8 +153,9 @@ class SensorFusion:
             self.gyro_bias['z'] = sum(gyro_samples['z']) / len(gyro_samples['z'])
             
             self.is_calibrated = True
+            
+            logger.info(f"IMU calibration complete. Biases: accel=({self.accel_bias['x']:.1f}, {self.accel_bias['y']:.1f}, {self.accel_bias['z']:.1f}), gyro=({self.gyro_bias['x']:.1f}, {self.gyro_bias['y']:.1f}, {self.gyro_bias['z']:.1f})")
         
-        logger.info("IMU calibration complete")
         return True
     
     def get_sensor_data(self):
