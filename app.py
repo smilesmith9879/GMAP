@@ -116,6 +116,7 @@ def handle_calibrate_imu():
 def background_tasks():
     """Run background tasks for continuous updates."""
     global is_running
+    frame_counter = 0
     
     while is_running:
         # Update sensor data (10Hz)
@@ -125,6 +126,15 @@ def background_tasks():
         # Update status
         status = status_monitor.get_status()
         socketio.emit('status_update', status)
+        
+        # 获取并发送视频帧 - 直接发送base64字符串，不包装在对象中
+        latest_frame = camera_control.get_latest_frame()
+        if latest_frame:
+            frame_counter += 1
+            # 每20帧记录一次日志，避免日志过多
+            if frame_counter % 20 == 0:
+                logger.info(f"Sending video frame #{frame_counter} to clients")
+            socketio.emit('video_frame', latest_frame)  # 直接发送字符串而不是对象
         
         # Sleep to maintain update rate
         time.sleep(0.1)  # 10Hz

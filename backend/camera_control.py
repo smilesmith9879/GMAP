@@ -104,8 +104,6 @@ class CameraControl:
             pan (int): Pan angle (35°-125°)
             tilt (int): Tilt angle (0°-85°)
         """
-        logger.info(f"Setting gimbal position - requested: pan={pan}°, tilt={tilt}°")
-        
         # Ensure values are within range
         original_pan, original_tilt = pan, tilt
         pan = max(35, min(125, pan))
@@ -125,18 +123,10 @@ class CameraControl:
         
         # Set servo angles
         try:
-            logger.info(f"About to call set_servo_angle with channel=0, pan={pan}")
             self.robot.set_servo_angle(9, pan)
-            logger.info(f"set_servo_angle for pan completed")
-            
-            logger.info(f"About to call set_servo_angle with channel=1, tilt={tilt}")
             self.robot.set_servo_angle(10, tilt)
-            logger.info(f"set_servo_angle for tilt completed")
-            
-            logger.info(f"Gimbal position successfully set to pan={pan}°, tilt={tilt}°")
         except Exception as e:
             logger.error(f"Error setting gimbal position: {e}", exc_info=True)
-            logger.error(f"LOBOROBOT object details: {type(self.robot)}")
     
     def get_latest_frame(self):
         """

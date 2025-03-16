@@ -9,7 +9,7 @@ Modules: MotorControl, CameraControl, SLAMProcessor, SensorFusion, WebSocketMana
 
 3、Hardware: 4WD chassis, USB Camera (320×240, 10 FPS), MPU6050 IMU, 2-axis gimbal, Pi 5
 
-4、Parameters
+4、Parameters【需防范Motion和Gimbal因共享LOBOROBOT导致GPIO冲突）
 （1）Motion (via LOBOROBOT.py):
 	Max speed: 60
 	Turn speed: 70%
@@ -21,7 +21,7 @@ Modules: MotorControl, CameraControl, SLAMProcessor, SensorFusion, WebSocketMana
 	Tilt: 0°-85°, default 40°,pwm10
 	Auto-center: (80°, 40°)
 
- (3)IMU: 10Hz, 50-sample calibration (5s), bias removal, “Calibration Complete” prompt
+ (3)IMU: 10Hz, 50-sample calibration (5s), bias removal, "Calibration Complete" prompt
 
  (4)Video: 320×240, 10 FPS, 70% JPEG, 3-frame buffer
 

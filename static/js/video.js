@@ -32,8 +32,18 @@ function initVideoStream() {
                 showNotification('Video streaming started', 'success');
             }
             
-            // Update video feed
-            videoFeed.src = `data:image/jpeg;base64,${data}`;
+            // 添加调试信息
+            console.log('Received video frame, type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data.data ? data.data.length : 'N/A'));
+            
+            // Update video feed - 处理两种可能的数据格式
+            if (typeof data === 'string') {
+                videoFeed.src = `data:image/jpeg;base64,${data}`;
+            } else if (data && data.data) {
+                videoFeed.src = `data:image/jpeg;base64,${data.data}`;
+            } else {
+                console.error('Unrecognized video frame format:', data);
+                return;
+            }
             
             // Update FPS counter
             updateFps();

@@ -38,6 +38,7 @@ class SensorFusion:
         self.bus = smbus.SMBus(1)  # I2C bus
         self.is_running = True
         self.is_calibrated = False
+        self.is_imu_available = False  # 添加IMU可用性标志
         self.sensor_thread = None
         self.lock = threading.Lock()
         
@@ -61,10 +62,13 @@ class SensorFusion:
                 # 读取WHO_AM_I寄存器(如果有)或任何其他寄存器
                 device_id = self.bus.read_byte_data(MPU6050_ADDR, 0x75)  # WHO_AM_I寄存器
                 logger.info(f"MPU6050 device ID: 0x{device_id:x}")
+                self.is_imu_available = True  # 如果成功读取设备ID，则标记IMU可用
             except Exception as e:
                 logger.error(f"Failed to communicate with MPU6050: {e}")
+                self.is_imu_available = False  # 无法通信则IMU不可用
         except Exception as e:
             logger.error(f"Failed to initialize I2C: {e}")
+            self.is_imu_available = False
         
         # Start sensor thread
         self.start()
@@ -112,10 +116,10 @@ class SensorFusion:
         """
         logger.info("Calibrate IMU called, current status:")
         logger.info(f"is_imu_available: {self.is_imu_available}")
-        logger.info(f"is_imu_calibrated: {self.is_imu_calibrated}")
+        logger.info(f"is_calibrated: {self.is_calibrated}")
         
-        if not self.is_imu_calibrated:  # 或 if not self.is_imu_available:
-            logger.warning("Cannot calibrate IMU due to condition check failure")
+        if not self.is_imu_available:  # 修改条件：IMU不可用时无法校准
+            logger.warning("Cannot calibrate IMU: IMU not available")
             return False
         
         logger.info("Starting IMU calibration...")
@@ -166,7 +170,8 @@ class SensorFusion:
                 'accelerometer': self.accel_data.copy(),
                 'gyroscope': self.gyro_data.copy(),
                 'orientation': self.orientation.copy(),
-                'is_calibrated': self.is_calibrated
+                'is_calibrated': self.is_calibrated,
+                'is_imu_available': self.is_imu_available  # 添加IMU可用性到返回的数据中
             }
     
     def _read_raw_data(self):
