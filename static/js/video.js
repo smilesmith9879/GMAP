@@ -15,25 +15,28 @@ let fps = 0;
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     initVideoStream();
+    console.log('DOM fully loaded and parsed, initializing video stream');
 });
 
 /**
  * Initialize video stream
  */
 function initVideoStream() {
-    if (!videoFeed) return;
+    if (!videoFeed) {
+        console.error('Video feed element not found');
+        return;
+    }
     
+    console.log('Setting up video stream with Socket.IO');
     // Set up Socket.IO event for video frames
     if (socket) {
         socket.on('video_frame', (data) => {
+            console.log('Received video frame, type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data.data ? data.data.length : 'N/A'));
             if (!isStreaming) {
                 isStreaming = true;
                 console.log('Video streaming started');
                 showNotification('Video streaming started', 'success');
             }
-            
-            // 添加调试信息
-            console.log('Received video frame, type:', typeof data, 'length:', typeof data === 'string' ? data.length : (data.data ? data.data.length : 'N/A'));
             
             // Update video feed - 处理两种可能的数据格式
             if (typeof data === 'string') {
@@ -57,6 +60,8 @@ function initVideoStream() {
             // Show no-signal image
             videoFeed.src = '/static/img/no-signal.png';
         });
+    } else {
+        console.error('Socket.IO not initialized');
     }
 }
 
