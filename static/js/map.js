@@ -201,12 +201,23 @@ function updateMap2D(mapData) {
     ctx.fillStyle = '#f0f0f0';
     ctx.fillRect(0, 0, map2dCanvas.width, map2dCanvas.height);
     
-    // Create image from map data
+    // 检查数据是否为空
+    if (!mapData || mapData.length < 100) {
+        console.error("地图数据太短或为空:", mapData);
+        ctx.fillStyle = 'red';
+        ctx.font = '16px Arial';
+        ctx.fillText('地图数据无效', 10, 30);
+        return;
+    }
+    
+    // 创建图像对象
     const img = new Image();
     
     // 添加错误处理
     img.onerror = (err) => {
         console.error("2D地图图像加载失败:", err);
+        // 输出base64数据的前100个字符，帮助调试
+        console.error("Base64数据前缀:", mapData.substring(0, 100) + "...");
         
         // 在出错时绘制红色边框以指示问题
         ctx.strokeStyle = 'red';
@@ -218,6 +229,9 @@ function updateMap2D(mapData) {
         ctx.font = '16px Arial';
         ctx.fillText('地图加载失败', 10, 30);
         ctx.fillText('检查后端日志', 10, 50);
+        
+        // 尝试直接绘制一个简单的地图
+        drawFallbackMap(ctx);
     };
     
     img.onload = () => {
@@ -231,13 +245,63 @@ function updateMap2D(mapData) {
     };
     
     try {
-        // 添加时间戳以避免缓存
-        console.log("设置图像源...");
-        img.src = `data:image/png;base64,${mapData}?t=${Date.now()}`;
+        // 确保正确的数据URL格式
+        const dataUrl = `data:image/png;base64,${mapData}`;
+        console.log("设置图像源...", "URL前缀:", dataUrl.substring(0, 30) + "...");
+        img.src = dataUrl;
         console.log("图像源已设置");
     } catch (e) {
         console.error("设置2D地图图像源时出错:", e);
     }
+}
+
+// 添加一个后备地图绘制函数
+function drawFallbackMap(ctx) {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    
+    // 绘制网格
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1;
+    
+    const gridSize = 20;
+    for (let x = 0; x < width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+    }
+    
+    for (let y = 0; y < height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+    
+    // 绘制中心点
+    const centerX = width / 2;
+    const centerY = height / 2;
+    
+    ctx.fillStyle = '#007bff';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 绘制十字线
+    ctx.strokeStyle = '#007bff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(centerX - 10, centerY);
+    ctx.lineTo(centerX + 10, centerY);
+    ctx.moveTo(centerX, centerY - 10);
+    ctx.lineTo(centerX, centerY + 10);
+    ctx.stroke();
+    
+    // 添加文本说明
+    ctx.fillStyle = 'orange';
+    ctx.font = '14px Arial';
+    ctx.fillText('使用后备地图 - 图像加载失败', 10, height - 20);
 }
 
 /**

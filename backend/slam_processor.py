@@ -226,18 +226,32 @@ class SLAMProcessor:
                 except Exception as e:
                     logger.error(f"保存调试地图图像失败: {e}")
             
-            # 将2D地图转换为PNG，然后编码为base64
-            _, buffer = cv2.imencode('.png', self.map_2d)
-            map_2d_encoded = base64.b64encode(buffer).decode('utf-8')
-            
-            logger.info(f"生成的2D地图base64数据长度: {len(map_2d_encoded)}")
-            
-            return {
-                'map_2d': map_2d_encoded,
-                'map_3d': self.map_3d,
-                'position': self.position,
-                'orientation': self.orientation
-            }
+            try:
+                # 将2D地图转换为PNG，然后编码为base64
+                _, buffer = cv2.imencode('.png', self.map_2d)
+                map_2d_encoded = base64.b64encode(buffer).decode('utf-8')
+                
+                # 验证base64编码是否有效
+                if not map_2d_encoded.startswith('/9j/') and not map_2d_encoded.startswith('iVBOR'):
+                    logger.warning(f"生成的base64数据可能无效，前缀: {map_2d_encoded[:20]}")
+                
+                logger.info(f"生成的2D地图base64数据长度: {len(map_2d_encoded)}")
+                
+                return {
+                    'map_2d': map_2d_encoded,
+                    'map_3d': self.map_3d,
+                    'position': self.position,
+                    'orientation': self.orientation
+                }
+            except Exception as e:
+                logger.error(f"地图编码过程中出错: {e}", exc_info=True)
+                # 返回空数据
+                return {
+                    'map_2d': '',
+                    'map_3d': self.map_3d,
+                    'position': self.position,
+                    'orientation': self.orientation
+                }
     
     def send_map_update(self):
         """Send map updates to the frontend."""
