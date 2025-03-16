@@ -136,75 +136,137 @@ def handle_error(error):
     logger.error(f"WebSocket error: {error}")
 
 def background_tasks():
-    """Run background tasks for continuous updates."""
+    """Run background tasks for continuous updates with improved task scheduling."""
     global is_running
     frame_counter = 0
     last_log_time = time.time()
-    last_map_check_time = time.time()
     
+    # 任务执行时间追踪
+    task_timestamps = {
+        'sensor': 0,
+        'status': 0,
+        'video': 0,
+        'slam': 0,
+        'map': 0
+    }
+    
+    # 创建专用线程
+    status_thread = None
+    video_thread = None
+    slam_thread = None
+    
+    def status_monitor_task():
+        """系统状态监控任务 - 在单独线程中运行"""
+        while is_running:
+            try:
+                # 获取系统状态
+                status = status_monitor.get_status()
+                socketio.emit('status_update', status)
+                
+                # 1秒更新一次系统状态
+                time.sleep(1.0)
+            except Exception as e:
+                logger.error(f"状态监控任务错误: {e}", exc_info=True)
+                time.sleep(0.5)
+    
+    def video_streaming_task():
+        """视频流处理任务 - 在单独线程中运行"""
+        nonlocal frame_counter
+        last_fps_log = time.time()
+        
+        while is_running:
+            try:
+                # 获取最新视频帧
+                latest_frame = camera_control.get_latest_frame()
+                if latest_frame:
+                    frame_counter += 1
+                    
+                    # 每200帧记录FPS
+                    if frame_counter % 200 == 0:
+                        current_time = time.time()
+                        elapsed = current_time - last_fps_log
+                        fps = 200 / elapsed if elapsed > 0 else 0
+                        logger.info(f"视频流: 帧 #{frame_counter}, 大小: {len(latest_frame)} 字节, 平均 FPS: {fps:.2f}")
+                        last_fps_log = current_time
+                    
+                    # 发送视频帧到前端
+                    socketio.emit('video_frame', {'data': latest_frame})
+                
+                # 大约10帧每秒的速率
+                time.sleep(0.1)
+            except Exception as e:
+                logger.error(f"视频流任务错误: {e}", exc_info=True)
+                time.sleep(0.5)
+    
+    # 启动专用线程
+    logger.info("启动专用任务线程...")
+    
+    # 系统状态监控线程 - 高优先级
+    status_thread = threading.Thread(target=status_monitor_task, daemon=True, name="StatusMonitor")
+    status_thread.start()
+    
+    # 视频流线程 - 高优先级
+    video_thread = threading.Thread(target=video_streaming_task, daemon=True, name="VideoStream")
+    video_thread.start()
+    
+    # 主循环 - 处理传感器数据和SLAM
     while is_running:
         try:
             cycle_start = time.time()
             
-            # Update sensor data (10Hz)
-            sensor_data = sensor_fusion.get_sensor_data()
-            socketio.emit('sensor_data', sensor_data)
+            # 1. 传感器数据处理 (优先级高，每次循环)
+            if cycle_start - task_timestamps['sensor'] >= 0.1:  # 10Hz
+                sensor_data = sensor_fusion.get_sensor_data()
+                socketio.emit('sensor_data', sensor_data)
+                
+                # 更新IMU数据到状态监控
+                status_monitor.update_imu_data(sensor_data)
+                
+                task_timestamps['sensor'] = cycle_start
             
-            # Update IMU data in status monitor
-            status_monitor.update_imu_data(sensor_data)
-            
-            # Update status
-            status = status_monitor.get_status()
-            socketio.emit('status_update', status)
-            
-            # 获取并发送视频帧
+            # 2. SLAM处理 (优先级低，限制频率)
             latest_frame = camera_control.get_latest_frame()
-            if latest_frame:
-                frame_counter += 1
-                # 每20帧记录一次日志，避免日志过多
-                if frame_counter % 200 == 0:
-                    current_time = time.time()
-                    elapsed = current_time - last_log_time
-                    fps = 200 / elapsed if elapsed > 0 else 0
-                    logger.info(f"Sending video frame #{frame_counter} to clients, size: {len(latest_frame)} bytes, avg FPS: {fps:.2f}")
-                    last_log_time = current_time
-                
-                # 发送格式保持一致 - 使用对象格式
-                try:
-                    socketio.emit('video_frame', {'data': latest_frame})
-                    
-                    # 将视频帧发送给SLAM处理器
-                    # 每秒处理2帧，以减轻CPU负担
-                    if frame_counter % 5 == 0:
-                        logger.debug(f"将第{frame_counter}帧发送到SLAM处理器")
-                        slam_processor.process_frame(latest_frame)
-                except Exception as e:
-                    logger.error(f"Error sending video frame: {e}")
+            if latest_frame and cycle_start - task_timestamps['slam'] >= 0.5:  # 每0.5秒处理一次
+                # 使用线程进行SLAM处理，避免阻塞主循环
+                if slam_thread is None or not slam_thread.is_alive():
+                    slam_thread = threading.Thread(
+                        target=lambda: slam_processor.process_frame(latest_frame),
+                        daemon=True,
+                        name="SLAMProcessor"
+                    )
+                    slam_thread.start()
+                    task_timestamps['slam'] = cycle_start
+                    logger.debug(f"SLAM处理: 帧 #{frame_counter}")
             
-            # 每5秒检查一次地图更新状态
-            current_time = time.time()
-            if current_time - last_map_check_time > 5:
-                last_map_check_time = current_time
-                map_data = slam_processor.get_maps()
-                logger.info(f"地图状态检查: 2D地图大小={len(map_data['map_2d']) if map_data['map_2d'] else 0}, 3D点数={len(map_data['map_3d'])}")
+            # 3. 地图更新 (优先级中，频率较低)
+            if cycle_start - task_timestamps['map'] >= 2.0:  # 每2秒更新一次地图
+                # 非阻塞方式获取地图数据
+                def update_map():
+                    try:
+                        map_data = slam_processor.get_maps()
+                        logger.info(f"地图状态: 2D={len(map_data['map_2d']) if map_data['map_2d'] else 0}字节, 3D点={len(map_data['map_3d'])}")
+                        slam_processor.send_map_update()
+                    except Exception as e:
+                        logger.error(f"地图更新错误: {e}")
                 
-                # 手动触发地图更新发送
-                slam_processor.send_map_update()
+                threading.Thread(target=update_map, daemon=True, name="MapUpdate").start()
+                task_timestamps['map'] = cycle_start
             
-            # 计算并等待剩余时间以维持10Hz频率
+            # 计算循环耗时并调整睡眠时间
             cycle_time = time.time() - cycle_start
-            remaining = 0.1 - cycle_time  # 目标10Hz
             
-            if remaining > 0:
-                time.sleep(remaining)
-            else:
-                # 如果循环耗时超过0.1秒，记录警告
-                if cycle_time > 0.2:  # 如果延迟超过0.2秒则警告
-                    logger.warning(f"Background task cycle taking too long: {cycle_time:.3f}s, target: 0.1s")
-                
+            # 目标循环频率50Hz (20ms)，确保响应及时
+            sleep_time = max(0.02 - cycle_time, 0)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            elif cycle_time > 0.1:  # 如果循环耗时超过100ms，记录警告
+                logger.warning(f"主循环耗时过长: {cycle_time:.3f}s, 目标: 0.02s")
+            
         except Exception as e:
-            logger.error(f"Error in background tasks: {e}", exc_info=True)
-            time.sleep(0.1)  # 出错时暂停一小段时间避免CPU占用过高
+            logger.error(f"主循环错误: {e}", exc_info=True)
+            time.sleep(0.1)  # 出错时暂停，避免CPU占用过高
+    
+    logger.info("后台任务终止")
 
 if __name__ == '__main__':
     # Start background thread for continuous updates
