@@ -254,4 +254,107 @@ class SensorFusion:
                 
             except Exception as e:
                 logger.error(f"Error in sensor loop: {e}")
-                time.sleep(update_interval) 
+                time.sleep(update_interval)
+
+    def _read_imu_data(self):
+        """Read raw data from the IMU."""
+        try:
+            logger.debug("Attempting to read IMU data")
+            
+            # Check if I2C bus is available
+            if self.bus is None:
+                logger.warning("I2C bus not initialized")
+                return None
+            
+            # Log I2C device address
+            logger.debug(f"Reading from IMU at I2C address: 0x{MPU6050_ADDR:x}")
+            
+            # Read accelerometer data
+            try:
+                acc_x = self._read_word_2c(ACCEL_XOUT_H)
+                acc_y = self._read_word_2c(ACCEL_YOUT_H)
+                acc_z = self._read_word_2c(ACCEL_ZOUT_H)
+                logger.debug(f"Raw accelerometer data: x={acc_x}, y={acc_y}, z={acc_z}")
+            except Exception as e:
+                logger.error(f"Failed to read accelerometer data: {e}", exc_info=True)
+                return None
+            
+            # Read gyroscope data
+            try:
+                gyro_x = self._read_word_2c(GYRO_XOUT_H)
+                gyro_y = self._read_word_2c(GYRO_YOUT_H)
+                gyro_z = self._read_word_2c(GYRO_ZOUT_H)
+                logger.debug(f"Raw gyroscope data: x={gyro_x}, y={gyro_y}, z={gyro_z}")
+            except Exception as e:
+                logger.error(f"Failed to read gyroscope data: {e}", exc_info=True)
+                return None
+            
+            # Scale the values
+            acc_x_scaled = acc_x / 16384.0
+            acc_y_scaled = acc_y / 16384.0
+            acc_z_scaled = acc_z / 16384.0
+            
+            gyro_x_scaled = gyro_x / 131.0
+            gyro_y_scaled = gyro_y / 131.0
+            gyro_z_scaled = gyro_z / 131.0
+            
+            logger.debug(f"Scaled accelerometer: x={acc_x_scaled:.4f}, y={acc_y_scaled:.4f}, z={acc_z_scaled:.4f}")
+            logger.debug(f"Scaled gyroscope: x={gyro_x_scaled:.4f}, y={gyro_y_scaled:.4f}, z={gyro_z_scaled:.4f}")
+            
+            return {
+                'acc': (acc_x_scaled, acc_y_scaled, acc_z_scaled),
+                'gyro': (gyro_x_scaled, gyro_y_scaled, gyro_z_scaled)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error reading IMU data: {e}", exc_info=True)
+            return None
+
+    def calibrate_imu(self):
+        """Calibrate the IMU by calculating offsets."""
+        logger.info("Starting IMU calibration")
+        
+        if not self.is_calibrated:
+            logger.warning("IMU not calibrated, cannot calibrate")
+            return False
+        
+        try:
+            # Take multiple samples to get stable offsets
+            samples = 100
+            logger.info(f"Collecting {samples} samples for calibration")
+            
+            gyro_x_sum = 0
+            gyro_y_sum = 0
+            gyro_z_sum = 0
+            
+            for i in range(samples):
+                data = self._read_imu_data()
+                if data:
+                    gyro_x_sum += data['gyro'][0]
+                    gyro_y_sum += data['gyro'][1]
+                    gyro_z_sum += data['gyro'][2]
+                    
+                    if i % 10 == 0:
+                        logger.debug(f"Calibration progress: {i}/{samples}")
+                else:
+                    logger.warning("Failed to read IMU data during calibration")
+                    return False
+                
+                time.sleep(0.01)
+            
+            # Calculate average offsets
+            self.gyro_offsets = (
+                gyro_x_sum / samples,
+                gyro_y_sum / samples,
+                gyro_z_sum / samples
+            )
+            
+            logger.info(f"IMU calibration complete. Gyro offsets: x={self.gyro_offsets[0]:.4f}, y={self.gyro_offsets[1]:.4f}, z={self.gyro_offsets[2]:.4f}")
+            
+            # Set IMU as calibrated
+            self.is_calibrated = True
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during IMU calibration: {e}", exc_info=True)
+            return False 

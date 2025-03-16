@@ -13,9 +13,21 @@ from backend.sensor_fusion import SensorFusion
 from backend.websocket_manager import WebSocketManager
 from backend.status_monitor import StatusMonitor
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure logging - 设置为DEBUG级别以获取更详细的信息
+logging.basicConfig(
+    level=logging.DEBUG,  # 改为DEBUG以获取更详细的日志
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('robot_debug.log')  # 同时将日志保存到文件
+    ]
+)
 logger = logging.getLogger(__name__)
+
+# 设置第三方库的日志级别较高，避免过多无关日志
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('socketio').setLevel(logging.WARNING)
+logging.getLogger('engineio').setLevel(logging.WARNING)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -134,4 +146,10 @@ if __name__ == '__main__':
         motor_control.stop()
         camera_control.stop()
         slam_processor.stop()
-        sensor_fusion.stop() 
+        sensor_fusion.stop()
+
+# 创建简单脚本测试摄像头
+import cv2
+cap = cv2.VideoCapture(0)
+ret, frame = cap.read()
+print("Camera working:", ret) 

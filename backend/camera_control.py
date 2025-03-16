@@ -104,9 +104,20 @@ class CameraControl:
             pan (int): Pan angle (35°-125°)
             tilt (int): Tilt angle (0°-85°)
         """
+        logger.info(f"Setting gimbal position - requested: pan={pan}°, tilt={tilt}°")
+        
         # Ensure values are within range
+        original_pan, original_tilt = pan, tilt
         pan = max(35, min(125, pan))
         tilt = max(0, min(85, tilt))
+        
+        if original_pan != pan or original_tilt != tilt:
+            logger.info(f"Adjusted gimbal position to valid range: pan={pan}°, tilt={tilt}°")
+        
+        # Check if position actually changed
+        if abs(self.pan - pan) < 1 and abs(self.tilt - tilt) < 1:
+            logger.debug("Gimbal position unchanged, skipping update")
+            return
         
         # Update stored values
         self.pan = pan
@@ -114,12 +125,16 @@ class CameraControl:
         
         # Set servo angles
         try:
-            # Assuming channel 0 is pan and channel 1 is tilt
+            logger.debug(f"Calling set_servo_angle(0, {pan}) for pan")
             self.robot.set_servo_angle(0, pan)
+            
+            logger.debug(f"Calling set_servo_angle(1, {tilt}) for tilt")
             self.robot.set_servo_angle(1, tilt)
-            logger.debug(f"Gimbal position set to pan={pan}°, tilt={tilt}°")
+            
+            logger.info(f"Gimbal position successfully set to pan={pan}°, tilt={tilt}°")
         except Exception as e:
-            logger.error(f"Error setting gimbal position: {e}")
+            logger.error(f"Error setting gimbal position: {e}", exc_info=True)
+            logger.error(f"LOBOROBOT object details: {type(self.robot)}")
     
     def get_latest_frame(self):
         """
@@ -147,6 +162,10 @@ class CameraControl:
         """Camera loop that captures frames at the specified FPS."""
         frame_interval = 1.0 / self.fps
         last_frame_time = time.time()
+        frame_count = 0
+        error_count = 0
+        
+        logger.info("Camera loop started")
         
         while self.is_running:
             try:
@@ -158,21 +177,56 @@ class CameraControl:
                     time.sleep(frame_interval - elapsed)
                     continue
                 
-                last_frame_time = current_time
+                logger.debug(f"Attempting to capture frame after {elapsed:.3f}s")
+                
+                # Check camera status
+                if not self.camera or not self.camera.isOpened():
+                    logger.warning("Camera not opened or not available, attempting to reinitialize")
+                    self._init_camera()
+                    time.sleep(1)
+                    continue
                 
                 # Capture frame
                 ret, frame = self.camera.read()
                 if not ret:
-                    logger.warning("Failed to capture frame")
+                    error_count += 1
+                    logger.warning(f"Failed to capture frame (error {error_count}/10)")
+                    if error_count >= 10:  # Reinitialize after 10 consecutive errors
+                        logger.error("Too many capture errors, reinitializing camera")
+                        self._init_camera()
+                        error_count = 0
                     time.sleep(0.1)
                     continue
                 
+                # Reset error counter on successful capture
+                error_count = 0
+                frame_count += 1
+                
+                # Log frame size and type
+                logger.debug(f"Frame captured: {frame.shape}, type: {frame.dtype}")
+                
+                # Check if frame is empty or invalid
+                if frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
+                    logger.warning("Captured empty or invalid frame")
+                    time.sleep(0.1)
+                    continue
+                
+                # Calculate actual FPS
+                actual_fps = 1.0 / elapsed
+                logger.debug(f"Current FPS: {actual_fps:.2f}")
+                
                 # Encode frame to JPEG
                 encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
+                encode_start = time.time()
                 _, buffer = cv2.imencode('.jpg', frame, encode_param)
+                encode_time = time.time() - encode_start
                 
                 # Convert to base64 for transmission
+                b64_start = time.time()
                 jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+                b64_time = time.time() - b64_start
+                
+                logger.debug(f"Frame {frame_count}: encoding time: {encode_time:.3f}s, base64 time: {b64_time:.3f}s, size: {len(jpg_as_text)} bytes")
                 
                 # Update frame buffer
                 with self.lock:
@@ -180,7 +234,15 @@ class CameraControl:
                     # Keep buffer size limited
                     while len(self.frame_buffer) > self.max_buffer_size:
                         self.frame_buffer.pop(0)
+                    
+                    logger.debug(f"Frame buffer size: {len(self.frame_buffer)}")
+                
+                last_frame_time = current_time
+                
+                # Log every 100 frames
+                if frame_count % 100 == 0:
+                    logger.info(f"Processed {frame_count} frames, current buffer size: {len(self.frame_buffer)}")
                 
             except Exception as e:
-                logger.error(f"Error in camera loop: {e}")
+                logger.error(f"Error in camera loop: {e}", exc_info=True)
                 time.sleep(0.1) 
