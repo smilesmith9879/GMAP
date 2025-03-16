@@ -1,0 +1,45 @@
+AI Smart Four-Wheel Drive Car - Concise Project Description
+Overview
+An intelligent 4WD robotic car with real-time control, visual SLAM, sensor fusion, and web/mobile interfaces for remote operation, mapping, and tracking.
+Architecture
+1、Backend (Flask, Python, Raspberry Pi 5):
+Modules: MotorControl, CameraControl, SLAMProcessor, SensorFusion, WebSocketManager, StatusMonitor
+
+2、Frontend: Responsive web (desktop) + touch-optimized mobile
+
+3、Hardware: 4WD chassis, USB Camera (320×240, 10 FPS), MPU6050 IMU, 2-axis gimbal, Pi 5
+
+4、Parameters
+（1）Motion (via LOBOROBOT.py):
+	Max speed: 60
+	Turn speed: 70%
+	Control: 20Hz, joystick (-1 to 1), deadzone 0.05
+	Auto-center: (stop)
+
+（2）Gimbal (via LOBOROBOT.py):
+	Pan: 35°-125°, default 80°
+	Tilt: 0°-85°, default 40°
+	Auto-center: (80°, 40°)
+
+ (3)IMU: 10Hz, 50-sample calibration (5s), bias removal, “Calibration Complete” prompt
+
+ (4)Video: 320×240, 10 FPS, 70% JPEG, 3-frame buffer
+
+ (5)WebSocket: 25s ping, 60s timeout, 10 retries
+
+5、Features
+Motion: Differential drive, joystick-controlled (via LOBOROBOT.py)
+
+Camera: Real-time stream, joystick-controlled gimbal (via LOBOROBOT.py)
+
+SLAM: RTAB-Map, 10Hz 2D/3D maps, ROS 2 bridge
+
+Sensors: IMU fusion, 10Hz updates
+
+UI: Video, controls, diagnostics (FPS, CPU %, IMU data), 2D/3D map toggle
+
+6、More backend Notifications to help find errors: “IMU Calibration Complete”, “Video Interrupted”, “CPU Overload”, etc.
+
+
+
+

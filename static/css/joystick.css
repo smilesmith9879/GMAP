@@ -1,0 +1,99 @@
+/* Joystick Styles for AI Smart Four-Wheel Drive Car */
+
+.joystick-container {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    overflow: hidden;
+    touch-action: none;
+}
+
+.joystick-base {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100px;
+    height: 100px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+.joystick-handle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    background-color: #007bff;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s ease;
+}
+
+.joystick-handle:hover {
+    background-color: #0069d9;
+}
+
+.joystick-handle:active {
+    background-color: #0062cc;
+}
+
+/* NippleJS Overrides */
+.nipple {
+    opacity: 0.8 !important;
+}
+
+.nipple .front {
+    background-color: #007bff !important;
+}
+
+.nipple .back {
+    background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Movement Joystick */
+#movement-joystick .nipple .front {
+    background-color: #28a745 !important;
+}
+
+/* Camera Joystick */
+#camera-joystick .nipple .front {
+    background-color: #fd7e14 !important;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    .joystick-container {
+        height: 150px;
+    }
+    
+    .joystick-base {
+        width: 80px;
+        height: 80px;
+    }
+    
+    .joystick-handle {
+        width: 30px;
+        height: 30px;
+    }
+}
+
+/* Dark Mode */
+.dark-mode .joystick-container {
+    background-color: #444;
+}
+
+.dark-mode .joystick-base {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .nipple .back {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+} 

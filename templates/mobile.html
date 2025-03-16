@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}AI Smart 4WD Car - Mobile Control{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/joystick.css') }}">
+<style>
+    body {
+        overscroll-behavior: none;
+        touch-action: none;
+        overflow: hidden;
+    }
+    
+    .video-container {
+        position: relative;
+        width: 100%;
+        height: 0;
+        padding-bottom: 75%; /* 4:3 aspect ratio */
+        background-color: #000;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+    
+    .video-feed {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    .joystick-container {
+        position: relative;
+        width: 100%;
+        height: 150px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        margin-bottom: 15px;
+    }
+    
+    .map-container {
+        position: relative;
+        width: 100%;
+        height: 250px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+    
+    .map-toggle-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 100;
+    }
+    
+    .status-card {
+        height: 100%;
+    }
+    
+    .notification-container {
+        max-height: 100px;
+        overflow-y: auto;
+    }
+    
+    .sensor-value {
+        font-weight: bold;
+    }
+    
+    .control-btn {
+        height: 60px;
+        font-size: 1.2rem;
+    }
+    
+    .btn-row {
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-2">
+    <!-- Video Feed -->
+    <div class="card mb-2">
+        <div class="card-header py-1">
+            <h5 class="mb-0"><i class="fas fa-video me-2"></i>Video Feed</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="video-container">
+                <img id="video-feed" class="video-feed" src="{{ url_for('static', filename='img/no-signal.png') }}" alt="Video Feed">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Controls -->
+    <div class="row g-2">
+        <!-- Movement Joystick -->
+        <div class="col-6">
+            <div class="card mb-2">
+                <div class="card-header py-1">
+                    <h5 class="mb-0"><i class="fas fa-gamepad me-2"></i>Movement</h5>
+                </div>
+                <div class="card-body p-2">
+                    <div id="movement-joystick" class="joystick-container"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Camera Joystick -->
+        <div class="col-6">
+            <div class="card mb-2">
+                <div class="card-header py-1">
+                    <h5 class="mb-0"><i class="fas fa-camera me-2"></i>Camera</h5>
+                </div>
+                <div class="card-body p-2">
+                    <div id="camera-joystick" class="joystick-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="row g-2 btn-row">
+        <div class="col-4">
+            <button id="stop-btn" class="btn btn-danger w-100 control-btn">
+                <i class="fas fa-stop mb-1"></i><br>Stop
+            </button>
+        </div>
+        <div class="col-4">
+            <button id="center-camera-btn" class="btn btn-secondary w-100 control-btn">
+                <i class="fas fa-crosshairs mb-1"></i><br>Center
+            </button>
+        </div>
+        <div class="col-4">
+            <button id="calibrate-imu-btn" class="btn btn-warning w-100 control-btn">
+                <i class="fas fa-sync mb-1"></i><br>Calibrate
+            </button>
+        </div>
+    </div>
+    
+    <!-- Map -->
+    <div class="card mb-2">
+        <div class="card-header py-1">
+            <h5 class="mb-0"><i class="fas fa-map me-2"></i>Map</h5>
+            <div class="btn-group map-toggle-btn">
+                <button id="map-2d-btn" class="btn btn-sm btn-primary active">2D</button>
+                <button id="map-3d-btn" class="btn btn-sm btn-outline-primary">3D</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="map-container">
+                <div id="map-2d" class="w-100 h-100"></div>
+                <div id="map-3d" class="w-100 h-100" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status -->
+    <div class="card">
+        <div class="card-header py-1">
+            <h5 class="mb-0"><i class="fas fa-tachometer-alt me-2"></i>Status</h5>
+        </div>
+        <div class="card-body p-2">
+            <div class="row">
+                <div class="col-6">
+                    <p class="mb-1">CPU: <span id="cpu-usage" class="sensor-value">0%</span></p>
+                    <p class="mb-1">Memory: <span id="memory-usage" class="sensor-value">0%</span></p>
+                </div>
+                <div class="col-6">
+                    <p class="mb-1">FPS: <span id="fps" class="sensor-value">0</span></p>
+                    <p class="mb-1">IMU: <span id="imu-status" class="sensor-value">Not Calibrated</span></p>
+                </div>
+            </div>
+            
+            <div id="notifications" class="notification-container mt-2">
+                <div class="alert alert-info py-1 px-2 mb-1">System ready</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/nipplejs.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/three.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/OrbitControls.js') }}"></script>
+<script src="{{ url_for('static', filename='js/joystick.js') }}"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/video.js') }}"></script>
+<script src="{{ url_for('static', filename='js/status.js') }}"></script>
+<script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+{% endblock %} 
