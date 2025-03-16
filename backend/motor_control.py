@@ -1,7 +1,7 @@
 import time
 import logging
 import threading
-from backend.lobo_motor import LOBOMotor
+from LOBOROBOT import LOBOROBOT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -9,13 +9,25 @@ logger = logging.getLogger(__name__)
 
 class MotorControl:
     """
-    Controls the movement of the 4WD car using the LOBOMotor library.
+    Controls the movement of the 4WD car using the LOBOROBOT library.
     Handles differential drive based on joystick input.
     """
     
-    def __init__(self):
-        """Initialize the motor control module."""
-        self.robot = LOBOMotor()
+    def __init__(self, robot=None):
+        """
+        Initialize the motor control module.
+        
+        Args:
+            robot (LOBOROBOT, optional): An existing LOBOROBOT instance to use.
+                                         If None, a new instance will be created.
+        """
+        if robot is None:
+            self.robot = LOBOROBOT()
+            logger.info("Created new LOBOROBOT instance in MotorControl")
+        else:
+            self.robot = robot
+            logger.info("Using shared LOBOROBOT instance in MotorControl")
+            
         self.max_speed = 60  # Maximum speed as per project requirements
         self.turn_speed_factor = 0.7  # Turn speed is 70% of max speed
         self.x = 0  # Joystick x-axis (-1 to 1)

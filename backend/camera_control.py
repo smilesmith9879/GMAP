@@ -4,7 +4,7 @@ import threading
 import logging
 import base64
 import numpy as np
-from backend.lobo_camera import LOBOCamera
+from LOBOROBOT import LOBOROBOT
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -16,9 +16,21 @@ class CameraControl:
     Handles video streaming and camera positioning.
     """
     
-    def __init__(self):
-        """Initialize the camera control module."""
-        self.robot = LOBOCamera()
+    def __init__(self, robot=None):
+        """
+        Initialize the camera control module.
+        
+        Args:
+            robot (LOBOROBOT, optional): An existing LOBOROBOT instance to use.
+                                         If None, a new instance will be created.
+        """
+        if robot is None:
+            self.robot = LOBOROBOT()
+            logger.info("Created new LOBOROBOT instance in CameraControl")
+        else:
+            self.robot = robot
+            logger.info("Using shared LOBOROBOT instance in CameraControl")
+            
         self.camera = None
         self.is_running = True
         self.frame_buffer = []
