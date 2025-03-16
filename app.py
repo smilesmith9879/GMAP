@@ -268,6 +268,29 @@ def background_tasks():
     
     logger.info("后台任务终止")
 
+# 创建一个简单脚本测试系统信息获取
+def test_system_info():
+    try:
+        # 测试CPU使用率
+        import psutil
+        cpu = psutil.cpu_percent(interval=0.1)
+        print(f"CPU: {cpu}%")
+        
+        # 测试内存使用率
+        memory = psutil.virtual_memory().percent
+        print(f"Memory: {memory}%")
+        
+        # 测试温度 (树莓派特有)
+        try:
+            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+                temp = float(f.read()) / 1000.0
+                print(f"Temperature: {temp}°C")
+        except:
+            print("Temperature reading failed")
+            
+    except Exception as e:
+        print(f"Error: {e}")
+
 if __name__ == '__main__':
     # Start background thread for continuous updates
     background_thread = threading.Thread(target=background_tasks)
