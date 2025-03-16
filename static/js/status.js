@@ -127,6 +127,39 @@ function updateSensorDisplay(data) {
         imuStatus.textContent = data.is_calibrated ? 'Calibrated' : 'Not Calibrated';
         imuStatus.className = data.is_calibrated ? 'sensor-value text-success' : 'sensor-value text-warning';
     }
+    
+    // Update accelerometer data
+    if (data.accelerometer) {
+        const accelX = document.getElementById('accel-x');
+        const accelY = document.getElementById('accel-y');
+        const accelZ = document.getElementById('accel-z');
+        
+        if (accelX) accelX.textContent = data.accelerometer.x.toFixed(2);
+        if (accelY) accelY.textContent = data.accelerometer.y.toFixed(2);
+        if (accelZ) accelZ.textContent = data.accelerometer.z.toFixed(2);
+    }
+    
+    // Update gyroscope data
+    if (data.gyroscope) {
+        const gyroX = document.getElementById('gyro-x');
+        const gyroY = document.getElementById('gyro-y');
+        const gyroZ = document.getElementById('gyro-z');
+        
+        if (gyroX) gyroX.textContent = data.gyroscope.x.toFixed(2);
+        if (gyroY) gyroY.textContent = data.gyroscope.y.toFixed(2);
+        if (gyroZ) gyroZ.textContent = data.gyroscope.z.toFixed(2);
+    }
+    
+    // Update orientation data
+    if (data.orientation) {
+        const orientationRoll = document.getElementById('orientation-roll');
+        const orientationPitch = document.getElementById('orientation-pitch');
+        const orientationYaw = document.getElementById('orientation-yaw');
+        
+        if (orientationRoll) orientationRoll.textContent = data.orientation.roll.toFixed(2);
+        if (orientationPitch) orientationPitch.textContent = data.orientation.pitch.toFixed(2);
+        if (orientationYaw) orientationYaw.textContent = data.orientation.yaw.toFixed(2);
+    }
 }
 
 /**

@@ -32,6 +32,15 @@ class StatusMonitor:
         self.notifications = []
         self.max_notifications = 10
         
+        # IMU data
+        self.imu_data = {
+            'accelerometer': {'x': 0, 'y': 0, 'z': 0},
+            'gyroscope': {'x': 0, 'y': 0, 'z': 0},
+            'orientation': {'roll': 0, 'pitch': 0, 'yaw': 0},
+            'is_calibrated': False,
+            'is_available': False
+        }
+        
         # Start monitor thread
         self.monitor_thread = threading.Thread(target=self._monitor_loop)
         self.monitor_thread.daemon = True
@@ -64,8 +73,34 @@ class StatusMonitor:
                 'disk_usage': self.disk_usage,
                 'uptime': time.time() - self.start_time,
                 'fps': self.fps,
-                'notifications': self.notifications.copy()
+                'notifications': self.notifications.copy(),
+                'imu_data': self.imu_data.copy()  # Add IMU data to status
             }
+    
+    def update_imu_data(self, imu_data):
+        """
+        Update IMU sensor data.
+        
+        Args:
+            imu_data (dict): Dictionary containing IMU sensor data
+        """
+        with self.lock:
+            self.imu_data.update(imu_data)
+            
+            # Add notification if IMU calibration status changes
+            if imu_data.get('is_calibrated', False) and not self.imu_data.get('is_calibrated', False):
+                self.add_notification("IMU calibration completed")
+            elif not imu_data.get('is_calibrated', False) and self.imu_data.get('is_calibrated', False):
+                self.add_notification("IMU needs calibration")
+                
+            # Add notification if IMU availability changes
+            if imu_data.get('is_imu_available', False) and not self.imu_data.get('is_available', False):
+                self.add_notification("IMU connected")
+            elif not imu_data.get('is_imu_available', False) and self.imu_data.get('is_available', False):
+                self.add_notification("IMU disconnected")
+            
+            # Update availability flag
+            self.imu_data['is_available'] = imu_data.get('is_imu_available', False)
     
     def add_notification(self, message):
         """

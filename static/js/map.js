@@ -158,9 +158,23 @@ function animate3D() {
  * @param {Object} data - Map data
  */
 function updateMaps(data) {
+    console.log("收到地图数据更新:", {
+        "有2D数据": !!data.map_2d, 
+        "2D数据长度": data.map_2d ? data.map_2d.length : 0,
+        "有3D数据": !!data.map_3d, 
+        "3D点数": data.map_3d ? data.map_3d.length : 0,
+        "位置": data.position,
+        "方向": data.orientation
+    });
+    
     // Update 2D map
     if (data.map_2d && map2dCanvas) {
+        console.log("正在更新2D地图，数据长度:", data.map_2d.length);
         updateMap2D(data.map_2d);
+    } else {
+        console.warn("跳过2D地图更新 - 无数据或无canvas元素", 
+            "有数据:", !!data.map_2d, 
+            "有canvas:", !!map2dCanvas);
     }
     
     // Update 3D map
@@ -179,14 +193,51 @@ function updateMaps(data) {
  * @param {string} mapData - Base64 encoded map image
  */
 function updateMap2D(mapData) {
+    console.log("开始更新2D地图...", "数据长度:", mapData.length);
+    
     const ctx = map2dCanvas.getContext('2d');
+    
+    // 首先绘制清晰的背景
+    ctx.fillStyle = '#f0f0f0';
+    ctx.fillRect(0, 0, map2dCanvas.width, map2dCanvas.height);
     
     // Create image from map data
     const img = new Image();
-    img.onload = () => {
-        ctx.drawImage(img, 0, 0, map2dCanvas.width, map2dCanvas.height);
+    
+    // 添加错误处理
+    img.onerror = (err) => {
+        console.error("2D地图图像加载失败:", err);
+        
+        // 在出错时绘制红色边框以指示问题
+        ctx.strokeStyle = 'red';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(0, 0, map2dCanvas.width, map2dCanvas.height);
+        
+        // 绘制文本说明
+        ctx.fillStyle = 'red';
+        ctx.font = '16px Arial';
+        ctx.fillText('地图加载失败', 10, 30);
+        ctx.fillText('检查后端日志', 10, 50);
     };
-    img.src = `data:image/png;base64,${mapData}`;
+    
+    img.onload = () => {
+        console.log("2D地图图像加载成功，尺寸:", img.width, "x", img.height);
+        ctx.drawImage(img, 0, 0, map2dCanvas.width, map2dCanvas.height);
+        
+        // 在成功加载后添加时间戳
+        ctx.fillStyle = 'blue';
+        ctx.font = '10px Arial';
+        ctx.fillText('更新: ' + new Date().toLocaleTimeString(), 5, map2dCanvas.height - 5);
+    };
+    
+    try {
+        // 添加时间戳以避免缓存
+        console.log("设置图像源...");
+        img.src = `data:image/png;base64,${mapData}?t=${Date.now()}`;
+        console.log("图像源已设置");
+    } catch (e) {
+        console.error("设置2D地图图像源时出错:", e);
+    }
 }
 
 /**

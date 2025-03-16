@@ -57,13 +57,40 @@ class SLAMProcessor:
     
     def _init_maps(self):
         """Initialize empty maps."""
-        # Create an empty 2D map (occupancy grid)
-        self.map_2d = np.zeros(self.map_size, dtype=np.uint8)
+        # Create an empty 2D map (occupancy grid) - 使用灰色背景而非纯黑
+        self.map_2d = np.ones(self.map_size, dtype=np.uint8) * 240  # 浅灰色背景
+        
+        # 添加网格线以便于查看
+        grid_size = 20
+        for x in range(0, self.map_size[0], grid_size):
+            self.map_2d[:, x] = 200  # 深灰色网格线
+        
+        for y in range(0, self.map_size[1], grid_size):
+            self.map_2d[y, :] = 200  # 深灰色网格线
+        
+        # 添加中心点和十字
+        center_x = self.map_size[0] // 2
+        center_y = self.map_size[1] // 2
+        
+        # 绘制中心十字线
+        self.map_2d[center_y, center_x-10:center_x+10] = 50  # 水平线
+        self.map_2d[center_y-10:center_y+10, center_x] = 50  # 垂直线
+        
+        # 绘制中心点
+        cv2.circle(self.map_2d, (center_x, center_y), 3, 0, -1)  # 黑色中心点
         
         # Create an empty 3D map (point cloud)
         self.map_3d = []
         
-        logger.info("Maps initialized")
+        # 保存初始地图调试图像
+        try:
+            cv2.imwrite('debug_initial_map_2d.png', self.map_2d)
+            logger.info("初始地图已保存为debug_initial_map_2d.png")
+        except Exception as e:
+            logger.error(f"保存初始地图调试图像失败: {e}")
+        
+        logger.info(f"地图已初始化，大小: {self.map_size}, 中心点: ({center_x}, {center_y})")
+        logger.info(f"地图类型: {self.map_2d.dtype}, 最小值: {np.min(self.map_2d)}, 最大值: {np.max(self.map_2d)}")
     
     def start(self):
         """Start the SLAM processor thread."""
@@ -186,9 +213,24 @@ class SLAMProcessor:
             dict: Dictionary containing 2D and 3D maps
         """
         with self.lock:
+            # 检查地图数据是否为空或全黑
+            is_empty = self.map_2d is None
+            is_all_black = False if is_empty else np.max(self.map_2d) == 0
+            logger.info(f"地图状态检查 - 是否为空: {is_empty}, 是否全黑: {is_all_black}, 尺寸: {self.map_2d.shape if self.map_2d is not None else 'None'}")
+            
+            # 保存地图图像用于调试
+            if not is_empty:
+                try:
+                    cv2.imwrite('debug_map_2d.png', self.map_2d)
+                    logger.info("已保存地图调试图像到debug_map_2d.png")
+                except Exception as e:
+                    logger.error(f"保存调试地图图像失败: {e}")
+            
             # 将2D地图转换为PNG，然后编码为base64
             _, buffer = cv2.imencode('.png', self.map_2d)
             map_2d_encoded = base64.b64encode(buffer).decode('utf-8')
+            
+            logger.info(f"生成的2D地图base64数据长度: {len(map_2d_encoded)}")
             
             return {
                 'map_2d': map_2d_encoded,
@@ -202,14 +244,21 @@ class SLAMProcessor:
         if self.socketio:
             try:
                 map_data = self.get_maps()
-                logger.debug(f"Sending map update to frontend, 2D map size: {len(map_data['map_2d'])}, 3D points: {len(map_data['map_3d'])}")
+                logger.info(f"发送地图更新到前端, 2D地图大小: {len(map_data['map_2d'])}, 3D点数: {len(map_data['map_3d'])}, 位置: {map_data['position']}")
+                
+                # 检查SocketIO连接状态
+                if hasattr(self.socketio, 'server') and hasattr(self.socketio.server, 'manager'):
+                    rooms = self.socketio.server.manager.rooms
+                    connected = len(rooms.keys()) > 0 if rooms else False
+                    logger.info(f"SocketIO连接状态: {'已连接' if connected else '未连接'}")
+                
                 self.socketio.emit('map_update', map_data)
                 return True
             except Exception as e:
-                logger.error(f"Error sending map update: {e}")
+                logger.error(f"发送地图更新时出错: {e}", exc_info=True)
                 return False
         else:
-            logger.warning("SocketIO not available for sending map updates")
+            logger.warning("SocketIO不可用，无法发送地图更新")
             return False
     
     def update_position(self, position, orientation):
@@ -260,6 +309,8 @@ class SLAMProcessor:
         """
         with self.lock:
             try:
+                logger.info(f"开始从{len(matches)}个特征匹配更新地图")
+                
                 # 计算平均移动
                 dx = 0
                 dy = 0
@@ -278,10 +329,15 @@ class SLAMProcessor:
                     dx /= count
                     dy /= count
                     
+                    logger.info(f"计算得到的平均位移: dx={dx:.2f}, dy={dy:.2f}")
+                    
                     # 更新位置
                     scale = 0.01  # 缩放因子
+                    old_x, old_y = self.position['x'], self.position['y']
                     self.position['x'] += dx * scale
                     self.position['y'] += dy * scale
+                    
+                    logger.info(f"更新位置: ({old_x:.2f}, {old_y:.2f}) -> ({self.position['x']:.2f}, {self.position['y']:.2f})")
                     
                     # 添加特征点到3D地图
                     point_color = (
@@ -320,13 +376,26 @@ class SLAMProcessor:
                     x = max(0, min(self.map_size[0]-1, x))
                     y = max(0, min(self.map_size[1]-1, y))
                     
+                    logger.info(f"2D地图上的点位置: ({x}, {y}), 对应实际位置: ({self.position['x']:.2f}, {self.position['y']:.2f})")
+                    
+                    # 检查地图颜色值
+                    before_max = np.max(self.map_2d)
+                    
                     # 在地图上绘制轨迹
                     cv2.circle(self.map_2d, (x, y), 1, 255, -1)
                     
-                    logger.debug(f"Updated map, position: ({self.position['x']:.2f}, {self.position['y']:.2f})")
+                    after_max = np.max(self.map_2d)
+                    logger.info(f"地图颜色值变化: {before_max} -> {after_max}, 坐标({x}, {y})处的当前值: {self.map_2d[y, x]}")
+                    
+                    # 添加一个十字标记，让地图更容易可见
+                    cv2.line(self.map_2d, (x-5, y), (x+5, y), 200, 1)
+                    cv2.line(self.map_2d, (x, y-5), (x, y+5), 200, 1)
+                    
+                    # 确保地图中心点始终为白色
+                    cv2.circle(self.map_2d, (map_center_x, map_center_y), 3, 255, -1)
                 
             except Exception as e:
-                logger.error(f"Error updating map from matches: {e}")
+                logger.error(f"从匹配更新地图时出错: {e}", exc_info=True)
     
     def _slam_loop(self):
         """SLAM loop that runs at 10Hz to update maps."""

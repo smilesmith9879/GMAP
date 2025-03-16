@@ -140,6 +140,7 @@ def background_tasks():
     global is_running
     frame_counter = 0
     last_log_time = time.time()
+    last_map_check_time = time.time()
     
     while is_running:
         try:
@@ -148,6 +149,9 @@ def background_tasks():
             # Update sensor data (10Hz)
             sensor_data = sensor_fusion.get_sensor_data()
             socketio.emit('sensor_data', sensor_data)
+            
+            # Update IMU data in status monitor
+            status_monitor.update_imu_data(sensor_data)
             
             # Update status
             status = status_monitor.get_status()
@@ -168,8 +172,24 @@ def background_tasks():
                 # 发送格式保持一致 - 使用对象格式
                 try:
                     socketio.emit('video_frame', {'data': latest_frame})
+                    
+                    # 将视频帧发送给SLAM处理器
+                    # 每秒处理2帧，以减轻CPU负担
+                    if frame_counter % 5 == 0:
+                        logger.debug(f"将第{frame_counter}帧发送到SLAM处理器")
+                        slam_processor.process_frame(latest_frame)
                 except Exception as e:
                     logger.error(f"Error sending video frame: {e}")
+            
+            # 每5秒检查一次地图更新状态
+            current_time = time.time()
+            if current_time - last_map_check_time > 5:
+                last_map_check_time = current_time
+                map_data = slam_processor.get_maps()
+                logger.info(f"地图状态检查: 2D地图大小={len(map_data['map_2d']) if map_data['map_2d'] else 0}, 3D点数={len(map_data['map_3d'])}")
+                
+                # 手动触发地图更新发送
+                slam_processor.send_map_update()
             
             # 计算并等待剩余时间以维持10Hz频率
             cycle_time = time.time() - cycle_start
