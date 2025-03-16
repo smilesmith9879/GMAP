@@ -3,7 +3,6 @@ from flask_socketio import SocketIO, emit
 import time
 import threading
 import logging
-from LOBOROBOT import LOBOROBOT
 
 # Import backend modules
 from backend.motor_control import MotorControl
@@ -12,6 +11,7 @@ from backend.slam_processor import SLAMProcessor
 from backend.sensor_fusion import SensorFusion
 from backend.websocket_manager import WebSocketManager
 from backend.status_monitor import StatusMonitor
+from backend.gpio_manager import get_gpio_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -22,13 +22,13 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'ai-smart-four-wheel-drive-car'
 socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
 
-# Initialize LOBOROBOT once
-robot = LOBOROBOT()
-logger.info("LOBOROBOT initialized once for all modules")
+# Initialize GPIO manager first
+gpio_manager = get_gpio_manager()
+logger.info("GPIO manager initialized")
 
-# Initialize backend modules with shared robot instance
-motor_control = MotorControl(robot=robot)
-camera_control = CameraControl(robot=robot)
+# Initialize backend modules
+motor_control = MotorControl()
+camera_control = CameraControl()
 slam_processor = SLAMProcessor()
 sensor_fusion = SensorFusion()
 websocket_manager = WebSocketManager(socketio)
@@ -134,5 +134,4 @@ if __name__ == '__main__':
         motor_control.stop()
         camera_control.stop()
         slam_processor.stop()
-        sensor_fusion.stop()
-        # No need to explicitly stop the robot as it's handled by the modules 
+        sensor_fusion.stop() 
