@@ -32,7 +32,15 @@ logging.getLogger('engineio').setLevel(logging.WARNING)
 # Initialize Flask app
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'ai-smart-four-wheel-drive-car'
-socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
+# 使用已验证有效的SocketIO配置
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode='threading',  # 使用threading模式增强性能
+    ping_timeout=60,         # 增加ping超时到60秒
+    ping_interval=25,        # 增加ping间隔到25秒
+    max_http_buffer_size=10 * 1024 * 1024  # 增加HTTP缓冲区大小到10MB
+)
 
 # Initialize LOBOROBOT once to avoid GPIO conflicts
 robot = LOBOROBOT()
@@ -72,13 +80,16 @@ def handle_connect():
     global connected_clients
     connected_clients += 1
     logger.info(f"Client connected. Total clients: {connected_clients}")
+    # 记录连接类型
+    transport = request.environ.get('HTTP_UPGRADE', '').lower() == 'websocket'
+    logger.info(f"Client connection type: {'WebSocket' if transport else 'HTTP polling'}")
     emit('status', {'message': 'Connected to server', 'clients': connected_clients})
     
     # 发送一个测试帧
     latest_frame = camera_control.get_latest_frame()
     if latest_frame:
-        logger.info("Sending initial test frame on connection")
-        emit('video_frame', latest_frame)  # 或 {'data': latest_frame} 取决于前端期望
+        logger.info(f"Sending initial test frame on connection, size: {len(latest_frame)} bytes")
+        emit('video_frame', {'data': latest_frame})  # 使用对象格式，与background_tasks一致
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -128,27 +139,52 @@ def background_tasks():
     """Run background tasks for continuous updates."""
     global is_running
     frame_counter = 0
+    last_log_time = time.time()
     
     while is_running:
-        # Update sensor data (10Hz)
-        sensor_data = sensor_fusion.get_sensor_data()
-        socketio.emit('sensor_data', sensor_data)
-        
-        # Update status
-        status = status_monitor.get_status()
-        socketio.emit('status_update', status)
-        
-        # 获取并发送视频帧 - 直接发送base64字符串，不包装在对象中
-        latest_frame = camera_control.get_latest_frame()
-        if latest_frame:
-            frame_counter += 1
-            # 每20帧记录一次日志，避免日志过多
-            if frame_counter % 20 == 0:
-                logger.info(f"Sending video frame #{frame_counter} to clients")
-            socketio.emit('video_frame', {'data': latest_frame})  # 使用对象格式包装数据
-        
-        # Sleep to maintain update rate
-        time.sleep(0.1)  # 10Hz
+        try:
+            cycle_start = time.time()
+            
+            # Update sensor data (10Hz)
+            sensor_data = sensor_fusion.get_sensor_data()
+            socketio.emit('sensor_data', sensor_data)
+            
+            # Update status
+            status = status_monitor.get_status()
+            socketio.emit('status_update', status)
+            
+            # 获取并发送视频帧
+            latest_frame = camera_control.get_latest_frame()
+            if latest_frame:
+                frame_counter += 1
+                # 每20帧记录一次日志，避免日志过多
+                if frame_counter % 20 == 0:
+                    current_time = time.time()
+                    elapsed = current_time - last_log_time
+                    fps = 20 / elapsed if elapsed > 0 else 0
+                    logger.info(f"Sending video frame #{frame_counter} to clients, size: {len(latest_frame)} bytes, avg FPS: {fps:.2f}")
+                    last_log_time = current_time
+                
+                # 发送格式保持一致 - 使用对象格式
+                try:
+                    socketio.emit('video_frame', {'data': latest_frame})
+                except Exception as e:
+                    logger.error(f"Error sending video frame: {e}")
+            
+            # 计算并等待剩余时间以维持10Hz频率
+            cycle_time = time.time() - cycle_start
+            remaining = 0.1 - cycle_time  # 目标10Hz
+            
+            if remaining > 0:
+                time.sleep(remaining)
+            else:
+                # 如果循环耗时超过0.1秒，记录警告
+                if cycle_time > 0.2:  # 如果延迟超过0.2秒则警告
+                    logger.warning(f"Background task cycle taking too long: {cycle_time:.3f}s, target: 0.1s")
+                
+        except Exception as e:
+            logger.error(f"Error in background tasks: {e}", exc_info=True)
+            time.sleep(0.1)  # 出错时暂停一小段时间避免CPU占用过高
 
 if __name__ == '__main__':
     # Start background thread for continuous updates

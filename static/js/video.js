@@ -36,18 +36,22 @@ function initVideoStream() {
             // 始终设置isStreaming为true并更新视频
             isStreaming = true;
             
-            // 添加时间戳防止浏览器缓存
             try {
                 // 处理两种可能的数据格式
                 if (typeof data === 'string') {
-                    videoFeed.src = `data:image/jpeg;base64,${data}?t=${new Date().getTime()}`;
+                    // 正确格式：不要在data URI中添加查询参数
+                    videoFeed.src = `data:image/jpeg;base64,${data}`;
                     console.log('Updated video with string data');
                 } else if (data && data.data) {
-                    videoFeed.src = `data:image/jpeg;base64,${data.data}?t=${new Date().getTime()}`;
+                    // 正确格式：不要在data URI中添加查询参数
+                    videoFeed.src = `data:image/jpeg;base64,${data.data}`;
                     console.log('Updated video with object data');
                 } else {
                     console.error('Invalid video data format:', data);
                 }
+                
+                // 防止缓存的另一种方法 - 通过添加一个随机属性
+                videoFeed.setAttribute('data-timestamp', new Date().getTime());
                 
                 // 强制重绘视频元素
                 videoFeed.style.display = 'none';
