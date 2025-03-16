@@ -4,6 +4,7 @@ import logging
 import psutil
 import os
 import platform
+import subprocess
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -155,24 +156,16 @@ class StatusMonitor:
         """Update system status information."""
         try:
             # Get CPU usage
-            cpu_usage = psutil.cpu_percent(interval=None)
+            cpu_usage = self._get_cpu_usage()
             
             # Get memory usage
-            memory = psutil.virtual_memory()
-            memory_usage = memory.percent
+            memory_usage = self._get_memory_usage()
             
             # Get disk usage
-            disk = psutil.disk_usage('/')
-            disk_usage = disk.percent
+            disk_usage = psutil.disk_usage('/').percent
             
             # Get temperature (if available)
-            temperature = 0
-            if hasattr(psutil, "sensors_temperatures"):
-                temps = psutil.sensors_temperatures()
-                if temps:
-                    for name, entries in temps.items():
-                        for entry in entries:
-                            temperature = max(temperature, entry.current)
+            temperature = self._get_temperature()
             
             # Update status data
             with self.lock:
@@ -197,4 +190,42 @@ class StatusMonitor:
             
             # Check temperature
             if self.temperature > 80:
-                self.add_notification("High Temperature") 
+                self.add_notification("High Temperature")
+    
+    def _get_cpu_usage(self):
+        try:
+            # 树莓派Ubuntu系统下获取CPU使用率
+            return psutil.cpu_percent(interval=0.1)
+        except ImportError:
+            logger.error("psutil模块未安装，无法获取CPU信息")
+            return 0
+        except Exception as e:
+            logger.error(f"获取CPU使用率失败: {e}")
+            return 0
+    
+    def _get_memory_usage(self):
+        try:
+            # 树莓派Ubuntu系统下获取内存使用率
+            return psutil.virtual_memory().percent
+        except ImportError:
+            logger.error("psutil模块未安装，无法获取内存信息")
+            return 0
+        except Exception as e:
+            logger.error(f"获取内存使用率失败: {e}")
+            return 0
+    
+    def _get_temperature(self):
+        try:
+            # 尝试从树莓派温度文件读取
+            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+                temp = float(f.read()) / 1000.0
+                return temp
+        except:
+            try:
+                # 备选方案：使用vcgencmd（树莓派特有）
+                output = subprocess.check_output(['vcgencmd', 'measure_temp'])
+                temp = float(output.decode('utf-8').replace('temp=', '').replace('\'C', ''))
+                return temp
+            except:
+                logger.error("获取温度失败，无法读取温度文件或执行vcgencmd命令")
+                return 0 
