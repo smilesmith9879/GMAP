@@ -159,18 +159,78 @@ def background_tasks():
         """系统状态监控任务 - 在单独线程中运行"""
         logger.info("状态监控线程启动")
         count = 0
+        last_error_time = 0
+        
         while is_running:
             try:
                 count += 1
-                logger.info(f"尝试获取系统状态 #{count}")
-                status = status_monitor.get_status()
-                logger.info(f"获取到状态: CPU={status.get('cpu')}%, 内存={status.get('memory')}%")
-                socketio.emit('status_update', status)
-                logger.info("状态数据已发送")
+                
+                # 获取系统状态，带容错处理
+                try:
+                    status = status_monitor.get_status()
+                    
+                    # 验证关键值，确保它们是有效的数字而非None
+                    cpu = status.get('cpu_usage', 0)
+                    memory = status.get('memory_usage', 0)
+                    temp = status.get('temperature', 0)
+                    
+                    # 检查值是否有效，如果无效则替换为0
+                    if cpu is None:
+                        status['cpu_usage'] = 0
+                    if memory is None: 
+                        status['memory_usage'] = 0
+                    if temp is None:
+                        status['temperature'] = 0
+                    
+                    # 确保数据是有效的浮点数
+                    status['cpu_usage'] = float(status['cpu_usage'])
+                    status['memory_usage'] = float(status['memory_usage'])
+                    status['temperature'] = float(status['temperature'])
+                    
+                    # 格式化日志信息
+                    if count % 10 == 0:  # 每10次记录一次完整状态，减少日志量
+                        logger.info(f"系统状态 #{count}: CPU={status['cpu_usage']:.1f}%, 内存={status['memory_usage']:.1f}%, 温度={status['temperature']:.1f}°C")
+                    else:
+                        logger.debug(f"系统状态 #{count}: CPU={status['cpu_usage']:.1f}%, 内存={status['memory_usage']:.1f}%, 温度={status['temperature']:.1f}°C")
+                
+                except Exception as e:
+                    # 如果获取状态失败，创建一个默认状态
+                    current_time = time.time()
+                    if current_time - last_error_time > 60:  # 限制错误日志频率
+                        logger.error(f"获取系统状态失败: {e}", exc_info=True)
+                        last_error_time = current_time
+                        
+                    status = {
+                        'cpu_usage': 0,
+                        'memory_usage': 0,
+                        'temperature': 0,
+                        'fps': status_monitor.fps,
+                        'uptime': time.time() - status_monitor.start_time,
+                        'notifications': [],
+                        'imu_data': {}
+                    }
+                    logger.warning("使用默认状态数据代替")
+                
+                # 发送状态数据到客户端
+                try:
+                    socketio.emit('status_update', status)
+                    if count % 30 == 0:  # 每30次记录一次发送成功，减少日志量
+                        logger.info(f"状态数据发送成功 #{count}")
+                except Exception as e:
+                    logger.error(f"发送状态数据失败: {e}")
+                
+                # 休眠1秒，不要太频繁更新
                 time.sleep(1.0)
+                
             except Exception as e:
-                logger.error(f"状态监控任务错误: {e}", exc_info=True)
-                time.sleep(0.5)
+                # 捕获任何可能的异常，确保线程不会崩溃
+                current_time = time.time()
+                if current_time - last_error_time > 60:  # 限制错误日志频率
+                    logger.error(f"状态监控任务主循环错误: {e}", exc_info=True)
+                    last_error_time = current_time
+                
+                # 出错后延长休眠时间，避免出错时CPU占用过高
+                time.sleep(5.0)
     
     def video_streaming_task():
         """视频流处理任务 - 在单独线程中运行"""
@@ -265,9 +325,7 @@ def background_tasks():
             elif cycle_time > 0.1:  # 如果循环耗时超过100ms，记录警告
                 logger.warning(f"主循环耗时过长: {cycle_time:.3f}s, 目标: 0.02s")
             
-            # 在主循环中获取并发送状态
-            status = status_monitor.get_status()
-            socketio.emit('status_update', status)
+            # 状态更新已由专门的状态监控线程处理，此处不再重复发送
             
         except Exception as e:
             logger.error(f"主循环错误: {e}", exc_info=True)

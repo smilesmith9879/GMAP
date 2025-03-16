@@ -53,13 +53,31 @@ function initStatusMonitoring() {
  * @param {Object} data - Status data
  */
 function updateStatusDisplay(data) {
+    // 记录收到的状态数据
+    console.log("收到状态更新:", {
+        "CPU": data.cpu_usage, 
+        "内存": data.memory_usage, 
+        "温度": data.temperature, 
+        "FPS": data.fps
+    });
+    
+    // 确保数据有效
+    if (!data) {
+        console.error("收到无效的状态数据");
+        return;
+    }
+    
+    // 处理CPU使用率
     if (cpuUsage) {
-        cpuUsage.textContent = `${Math.round(data.cpu_usage)}%`;
+        // 确保有有效值
+        const cpu = typeof data.cpu_usage === 'number' ? data.cpu_usage : 0;
+        cpuUsage.textContent = `${Math.round(cpu)}%`;
         
-        // Add warning class if CPU usage is high
-        if (data.cpu_usage > 80) {
+        // 添加警告类样式
+        if (cpu > 80) {
             cpuUsage.classList.add('text-danger');
-        } else if (data.cpu_usage > 60) {
+            cpuUsage.classList.remove('text-warning');
+        } else if (cpu > 60) {
             cpuUsage.classList.add('text-warning');
             cpuUsage.classList.remove('text-danger');
         } else {
@@ -67,13 +85,17 @@ function updateStatusDisplay(data) {
         }
     }
     
+    // 处理内存使用率
     if (memoryUsage) {
-        memoryUsage.textContent = `${Math.round(data.memory_usage)}%`;
+        // 确保有有效值
+        const memory = typeof data.memory_usage === 'number' ? data.memory_usage : 0;
+        memoryUsage.textContent = `${Math.round(memory)}%`;
         
-        // Add warning class if memory usage is high
-        if (data.memory_usage > 80) {
+        // 添加警告类样式
+        if (memory > 80) {
             memoryUsage.classList.add('text-danger');
-        } else if (data.memory_usage > 60) {
+            memoryUsage.classList.remove('text-warning');
+        } else if (memory > 60) {
             memoryUsage.classList.add('text-warning');
             memoryUsage.classList.remove('text-danger');
         } else {
@@ -81,13 +103,17 @@ function updateStatusDisplay(data) {
         }
     }
     
+    // 处理温度
     if (temperature) {
-        temperature.textContent = `${Math.round(data.temperature)}°C`;
+        // 确保有有效值
+        const temp = typeof data.temperature === 'number' ? data.temperature : 0;
+        temperature.textContent = `${Math.round(temp)}°C`;
         
-        // Add warning class if temperature is high
-        if (data.temperature > 70) {
+        // 添加警告类样式
+        if (temp > 70) {
             temperature.classList.add('text-danger');
-        } else if (data.temperature > 60) {
+            temperature.classList.remove('text-warning');
+        } else if (temp > 60) {
             temperature.classList.add('text-warning');
             temperature.classList.remove('text-danger');
         } else {
@@ -95,8 +121,14 @@ function updateStatusDisplay(data) {
         }
     }
     
-    // Update notifications
-    if (data.notifications && data.notifications.length > 0) {
+    // 更新FPS
+    const fpsElement = document.getElementById('fps');
+    if (fpsElement && typeof data.fps === 'number') {
+        fpsElement.textContent = Math.round(data.fps);
+    }
+    
+    // 更新通知
+    if (data.notifications && Array.isArray(data.notifications) && data.notifications.length > 0) {
         const notificationsContainer = document.getElementById('notifications');
         if (notificationsContainer) {
             // Clear existing notifications

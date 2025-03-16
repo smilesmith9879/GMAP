@@ -153,29 +153,39 @@ class StatusMonitor:
                 time.sleep(update_interval)
     
     def _update_system_status(self):
-        """Update system status information."""
+        """更新系统状态信息并记录详细日志"""
         try:
-            # Get CPU usage
+            logger.debug("开始更新系统状态")
+            
+            # 获取CPU使用率
             cpu_usage = self._get_cpu_usage()
             
-            # Get memory usage
+            # 获取内存使用率
             memory_usage = self._get_memory_usage()
             
-            # Get disk usage
-            disk_usage = psutil.disk_usage('/').percent
+            # 获取磁盘使用率
+            try:
+                disk_usage = psutil.disk_usage('/').percent
+                logger.debug(f"获取到磁盘使用率: {disk_usage}%")
+            except Exception as e:
+                logger.error(f"获取磁盘使用率失败: {e}")
+                disk_usage = 0
             
-            # Get temperature (if available)
+            # 获取温度
             temperature = self._get_temperature()
             
-            # Update status data
+            # 更新状态数据
             with self.lock:
                 self.cpu_usage = cpu_usage
                 self.memory_usage = memory_usage
                 self.temperature = temperature
                 self.disk_usage = disk_usage
             
+            logger.debug(f"系统状态已更新: CPU={cpu_usage}%, 内存={memory_usage}%, 温度={temperature}°C, 磁盘={disk_usage}%")
+            
         except Exception as e:
-            logger.error(f"Error updating system status: {e}")
+            logger.error(f"更新系统状态过程中出错: {e}", exc_info=True)
+            # 确保不会因为错误而停止监控
     
     def _check_critical_conditions(self):
         """Check for critical system conditions and add notifications."""
@@ -193,39 +203,59 @@ class StatusMonitor:
                 self.add_notification("High Temperature")
     
     def _get_cpu_usage(self):
+        """获取CPU使用率"""
         try:
-            # 树莓派Ubuntu系统下获取CPU使用率
-            return psutil.cpu_percent(interval=0.1)
-        except ImportError:
-            logger.error("psutil模块未安装，无法获取CPU信息")
-            return 0
+            # 使用psutil获取CPU使用率
+            cpu = psutil.cpu_percent(interval=0.1)
+            logger.debug(f"获取到CPU使用率: {cpu}%")
+            return cpu
         except Exception as e:
             logger.error(f"获取CPU使用率失败: {e}")
-            return 0
+            return 0  # 返回0而不是None，确保前端显示有效值
     
     def _get_memory_usage(self):
+        """获取内存使用率"""
         try:
-            # 树莓派Ubuntu系统下获取内存使用率
-            return psutil.virtual_memory().percent
-        except ImportError:
-            logger.error("psutil模块未安装，无法获取内存信息")
-            return 0
+            # 使用psutil获取内存使用率
+            memory = psutil.virtual_memory().percent
+            logger.debug(f"获取到内存使用率: {memory}%")
+            return memory
         except Exception as e:
             logger.error(f"获取内存使用率失败: {e}")
-            return 0
+            return 0  # 返回0而不是None
     
     def _get_temperature(self):
+        """获取系统温度"""
         try:
-            # 尝试从树莓派温度文件读取
-            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
-                temp = float(f.read()) / 1000.0
-                return temp
-        except:
+            # 首先尝试通过psutil获取温度
+            if hasattr(psutil, "sensors_temperatures"):
+                temps = psutil.sensors_temperatures()
+                if temps:
+                    # 检查不同的可能温度源
+                    for name, entries in temps.items():
+                        if entries:
+                            # 取第一个温度值
+                            temp = entries[0].current
+                            logger.debug(f"通过psutil获取到温度 ({name}): {temp}°C")
+                            return temp
+            
+            # 回退到直接读取树莓派温度文件
+            if os.path.exists('/sys/class/thermal/thermal_zone0/temp'):
+                with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+                    temp = float(f.read()) / 1000.0
+                    logger.debug(f"通过thermal_zone0获取到温度: {temp}°C")
+                    return temp
+            
+            # 最后尝试树莓派命令
             try:
-                # 备选方案：使用vcgencmd（树莓派特有）
-                output = subprocess.check_output(['vcgencmd', 'measure_temp'])
-                temp = float(output.decode('utf-8').replace('temp=', '').replace('\'C', ''))
+                output = subprocess.check_output(['vcgencmd', 'measure_temp'], stderr=subprocess.STDOUT)
+                temp_str = output.decode('utf-8')
+                temp = float(temp_str.replace('temp=', '').replace('\'C', ''))
+                logger.debug(f"通过vcgencmd获取到温度: {temp}°C")
                 return temp
             except:
-                logger.error("获取温度失败，无法读取温度文件或执行vcgencmd命令")
-                return 0 
+                logger.warning("温度获取方法都失败了，返回默认值0")
+                return 0
+        except Exception as e:
+            logger.error(f"获取温度过程中出错: {e}")
+            return 0  # 返回0而不是None 
